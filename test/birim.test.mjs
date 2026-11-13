@@ -110,3 +110,16 @@ test('magnet, Range, bencode', () => {
   assert.equal(parseTorrent(t2).infoHash, p.infoHash)
   assert.deepEqual(parseTorrent(t2).trackers, ['udp://a:1/announce'])
 })
+
+test('K3: Library.delete büyük harfli anahtarla da kaydı siler', async () => {
+  const { Library } = await import('../lib/library.mjs')
+  const os = await import('node:os'); const fs = await import('node:fs'); const path = await import('node:path')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lib-'))
+  try {
+    const lib = new Library(path.join(dir, 'library.json'))
+    lib.set({ infoHash: 'a'.repeat(40), state: 'paused' })
+    assert.ok(lib.get('A'.repeat(40)))
+    lib.delete('A'.repeat(40))
+    assert.equal(lib.all().length, 0)
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
