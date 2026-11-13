@@ -49,6 +49,18 @@ function json (res, code, body, extra = {}) {
   res.end(JSON.stringify(body))
 }
 
+
+const WEB_TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' }
+async function serveWeb (res, name) {
+  const type = WEB_TYPES[path.extname(name).toLowerCase()]
+  if (!type || !/^[\w.-]+$/.test(name) || name.startsWith('.')) return json(res, 404, { err: 'yok' })
+  try {
+    const body = await fsp.readFile(path.join(cfg.root, 'web', name))
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' })
+    res.end(body)
+  } catch { json(res, 404, { err: 'yok' }) }
+}
+
 async function handle (req, res) {
   const url = new URL(req.url, cfg.base)
   let parts
@@ -108,10 +120,9 @@ async function handle (req, res) {
     return fs.createReadStream(f).on('error', () => res.destroy()).pipe(res)
   }
   if (parts[0] === 'logo.svg') return res.writeHead(200, { 'Content-Type': 'image/svg+xml' }).end(addon.logo)
-  if (parts.length === 0) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
-    return res.end(await fsp.readFile(path.join(cfg.root, 'panel.html')))
-  }
+  // İndirme Merkezi (web/): kök sayfa + /ui/<dosya> varlıkları
+  if (parts.length === 0 || (parts.length === 1 && parts[0] === 'index.html')) return serveWeb(res, 'index.html')
+  if (parts[0] === 'ui' && parts.length === 2) return serveWeb(res, parts[1])
   json(res, 404, { err: 'yok' })
 }
 

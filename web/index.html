@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>İndirme Merkezi</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/ui/stil.css">
+</head>
+<body>
+<header class="ust" id="ust">
+  <a class="marka" href="#/" title="İndirmeler"><img src="/logo.svg" alt=""><span>İndirme Merkezi</span></a>
+  <nav class="sekmeler" aria-label="Ana bölümler">
+    <a href="#/" data-nav="indirmeler">İndirmeler</a>
+    <a href="#/ara" data-nav="ara">Başlık ara</a>
+  </nav>
+  <form class="arama" id="aramaFormu" role="search">
+    <input type="search" id="aramaKutusu" placeholder="Film ya da dizi ara…" autocomplete="off" enterkeyhint="search" aria-label="Film ya da dizi ara">
+    <button type="submit" class="dugme">Ara</button>
+  </form>
+  <button type="button" class="dugme kapat" id="kapatDugmesi" hidden aria-label="Kapat" title="Kapat (Esc)">✕ Kapat</button>
+</header>
+<main id="ana" tabindex="-1"></main>
+<div class="bildirimler" id="bildirimler" aria-live="polite"></div>
+<dialog id="onay" class="onay">
+  <form method="dialog">
+    <h2 id="onayBaslik"></h2>
+    <p id="onayMetin"></p>
+    <label class="onayTik" id="onayTikSatiri" hidden><input type="checkbox" id="onayTik"> <span id="onayTikMetin"></span></label>
+    <div class="onayDugmeler">
+      <button type="submit" value="iptal" class="dugme gri">Vazgeç</button>
+      <button type="submit" value="tamam" class="dugme tehlike" id="onayTamam">Tamam</button>
+    </div>
+  </form>
+</dialog>
+<script src="/ui/app.js"></script>
+</body>
+</html>

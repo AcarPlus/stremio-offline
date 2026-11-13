@@ -125,6 +125,10 @@ Notlar:
   ```
   `season` verilirse `episodes` yalnızca o sezonu içerir. Sezon seçici "bölüm sayısı ve toplam GB"yi buradan gösterir; seçilen bölümlerin `fileIdx` listesi `POST /api/items` `files` alanına gider.
 
+### Başlık arama (Faz 2)
+- `GET /api/search?q=breaking%20bad` → `{ q, results: [{ type: "movie"|"series", id: "tt…", name, year, poster }] }`. Cinemeta'nın herkese açık arama kataloğunu (`v3-cinemeta.strem.io/catalog/<tür>/top/search=…`) film ve dizi için sorar; adında arama sözcüğü geçenler öne alınır, türü başına en çok 15 sonuç, 5 dk önbellek. `q` en az 2 karakter (`400`). İnternet yoksa `502`. `poster` uzak adrestir (çevrimdışıyken görünmez).
+- `GET /api/title?type=series&id=tt0903747` → `{ type, id, name, year, poster, description, seasons: [{ season, episodes }] }`. Sezon seçiciye giden sezon listesi (0 = özel bölümler). Cinemeta'ya gider (`502` alınamazsa).
+
 ### Oynatma
 - `GET /play/:type/:id/:infoHash/:fileIdx` (`fileIdx` bilinmiyorsa `x`). Stremio'nun kayıtlı adresleriyle aynı biçim.
   - Dosya tamamsa **diskten** sunulur (motor gerekmez, internetsiz çalışır).
@@ -139,6 +143,41 @@ Notlar:
 
 ### Stremio eklenti uçları
 `/manifest.json`, `/stream/:type/:id.json` (kütüphanedeki dosyalar + Torrentio'dan "⬇ İndir+Oynat" satırları), `/catalog/:type/offline-movies|offline-series.json`, `/meta/:type/:id.json` (yalnızca kütüphanedekiler), `/img/:imdbId-poster|background|logo`, `/logo.svg`.
+
+## İndirme Merkezi arayüzü (Faz 2)
+
+Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`index.html`, `stil.css`, `app.js`), `/ui/<dosya>` adresinden okunur. Çatı kütüphane ve derleme adımı yok. Ekranlar adres parçasıyla (`#`) açılır:
+
+| Adres | Ekran |
+|---|---|
+| `/#/` | İndirmeler / İndirilenler (özet şeridi, kartlar, duraklat/sürdür/iptal/sil/oynat) |
+| `/#/ara`, `/#/ara/<söz>` | Başlık arama |
+| `/#/dizi/<tt…>` | Dizinin sezon listesi |
+| `/#/surum/movie/<tt…>`, `/#/surum/series/<tt…:sezon:bölüm>` | Sürüm seçici (film ya da tek bölüm) |
+| `/#/sezon/<tt…>/<sezon>` | Sezon seçici (paket ya da bölüm bölüm) |
+
+### Gömülü kip ve ana pencere ile haberleşme
+Sayfa `?embed=1` ile açılırsa (ör. `http://127.0.0.1:11480/?embed=1#/surum/movie/tt1727587`) iframe içinde kullanılmak üzere sıkı üst çubuk gösterir, görünür bir "Kapat" düğmesi ve Esc ile kapatma sunar; "oynat" bir adrese gitmek yerine ana pencereye ileti yollar. Gönderim `window.parent.postMessage(ileti, hedefKöken)` iledir; hedef köken, tarayıcı bildirirse doğrudan üst pencerenin kökenidir (`location.ancestorOrigins[0]`), yoksa `*`. Tüm iletilerde `source: 'offline-indir'` vardır; ana pencere bunu ve `event.origin`'i (servis kökeni) denetlemelidir.
+
+```js
+// Kapat düğmesi ya da Esc
+{ source: 'offline-indir', type: 'kapat' }
+
+// Bir öğe için "Oynat" (İndirilenler kartı, bölüm satırı ya da sürüm seçicide "İndir + oynat"/"Oynat")
+{ source: 'offline-indir', type: 'oynat', item: {
+    id, infoHash,            // kütüphane öğesi (torrent infoHash'i)
+    type,                    // 'movie' | 'series' | null
+    imdbId,                  // 'tt…' | null
+    videoId,                 // Stremio kimliği: film 'tt…', bölüm 'tt…:sezon:bölüm'
+    season, episode,         // bölüm değilse null
+    fileIdx, fileName,       // oynatılacak dosya (torrent içindeki numara, ad)
+    title, name,             // görünen ad (Cinemeta), torrent adı
+    state, poster,           // öğe durumu; yerel afiş adresi ('' olabilir)
+    playUrl                  // mutlak oynatma adresi: http://127.0.0.1:11480/play/<tür>/<kimlik>/<infoHash>/<dosya>
+} }
+```
+
+Gömülü olmayan kipte "oynat" aynı `playUrl`'i yeni sekmede açar. Ana pencereden sayfaya iletiyle komut gönderilmez; sayfa adresi (`#/…`) değiştirilerek istenen ekran açılır.
 
 ## Ayarlar (`config.json`)
 

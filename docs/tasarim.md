@@ -17,7 +17,7 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 ## Mevcut kod
 
 - `server.mjs`: giriş noktası, adres `127.0.0.1:11480`. Modüller `lib/` altında (Faz 1): `engine` (rqbit alt süreci, sağlık izleme, yeniden başlatma), `manager` (indirme yöneticisi), `library` (kalıcı kütüphane, eski biçimden taşıma), `torrentio`, `addon` (Stremio uçları), `api` (arayüz API'si, belge: `docs/api.md`), `play` (oynatma), `meta`, `episodes`, `bencode`, `inject`.
-- `panel.html`: geçici basit liste (Faz 2'de İndirme Merkezi ile değişecek).
+- `web/`: İndirme Merkezi (Faz 2; `index.html`, `stil.css`, `app.js`). Servis kökünde sunulur; belge: `docs/api.md` "İndirme Merkezi arayüzü".
 - `test/`: yerel döngü sınamaları (`npm test`).
 - `inject.js`: akış sağ tık menüsüne ve kart üç nokta menüsüne "Cihaza indir" ekler. Stremio'nun hata ayıklama kapısı (11481) üzerinden yüklenir.
 - `stremio-baslat.ps1`: servisi ve Stremio'yu kapı açık şekilde başlatır.
