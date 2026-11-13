@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import createTorrent from 'create-torrent'
+import { createTorrent } from '../../lib/bencode.mjs'
 
 export const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 export const DIZIN = path.join(KOK, 'data', 'bench-yerel')
@@ -32,11 +32,19 @@ function yaz(dosya, boyut, tohum) {
   fs.closeSync(fd)
 }
 
+// Tracker'siz .torrent (lib/bencode.mjs ile; webtorrent/create-torrent bagimliligi yok)
 function torrentYap(girdi, hedef, pieceLength) {
-  return new Promise((res, rej) => createTorrent(girdi, { announce: [], pieceLength, private: false }, (e, buf) => {
-    if (e) return rej(e)
-    fs.writeFileSync(hedef, buf); res(hedef)
-  }))
+  const tek = fs.statSync(girdi).isFile()
+  const dosyalar = tek ? [{ components: [path.basename(girdi)], tam: girdi }]
+    : fs.readdirSync(girdi).sort().map(ad => ({ components: [ad], tam: path.join(girdi, ad) }))
+  for (const d of dosyalar) d.length = fs.statSync(d.tam).size
+  const fds = dosyalar.map(d => fs.openSync(d.tam, 'r'))
+  try {
+    const buf = createTorrent({ name: path.basename(girdi), pieceLength, files: dosyalar, readAt: (i, ofs, n) => {
+      const b = Buffer.alloc(n); fs.readSync(fds[i], b, 0, n, ofs); return b } })
+    fs.writeFileSync(hedef, buf)
+    return hedef
+  } finally { fds.forEach(fd => fs.closeSync(fd)) }
 }
 
 export async function uret() {

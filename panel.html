@@ -47,43 +47,46 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 document.getElementById('install').href = 'stremio:///addons?addon=' + encodeURIComponent('http://127.0.0.1:' + location.port + '/manifest.json')
 
 async function load () {
-  const r = await fetch('/api/library').then(r => r.json()).catch(() => null)
+  const r = await fetch('/api/items').then(r => r.json()).catch(() => null)
   if (!r) return
-  document.getElementById('dir').textContent = 'İndirme klasörü: ' + r.downloadDir
+  const s = r.summary
+  document.getElementById('dir').textContent = 'İndirme klasörü: ' + s.downloadDir + ' · kullanılan ' + fmt(s.usedBytes) + (s.diskFreeBytes != null ? ' · boş ' + fmt(s.diskFreeBytes) : '') + (s.engine.ready ? '' : ' · motor hazır değil')
   const list = document.getElementById('list')
   if (!r.items.length) {
-    list.innerHTML = '<div class="empty">Henüz indirme yok. Stremio\'da bir başlık açıp <b>⬇ İndir+Oynat</b> satırına tıkla.</div>'
+    list.innerHTML = '<div class="empty">Henüz indirme yok. Stremio’da bir başlık açıp <b>⬇ İndir+Oynat</b> satırına tıkla.</div>'
     return
   }
+  const eta = n => n == null ? '' : n > 3600 ? Math.floor(n/3600) + ' sa ' + Math.floor(n%3600/60) + ' dk' : n > 60 ? Math.floor(n/60) + ' dk ' + (n%60) + ' sn' : n + ' sn'
   list.innerHTML = r.items.map(e => {
-    const pct = Math.floor(e.progress * 100)
-    const done = e.state === 'done'
-    const stat = done ? '✔ Hazır · internetsiz oynar · ' + fmt(e.size)
-      : e.error ? '✖ Başlamadı: ' + esc(e.error)
-      : !e.size ? 'Kaynaklara bağlanılıyor…'
-      : `%${pct} · ${fmt(e.size * e.progress)} / ${fmt(e.size)} · ${(e.speed/1e6).toFixed(1)} MB/sn · ${e.peers} kaynak`
-    return `<div class="item ${done ? 'done' : ''}">
-      ${e.poster ? `<img src="${esc(e.poster)}" alt="">` : '<div class="ph"></div>'}
-      <div class="body">
-        <div class="title">${esc(e.name || e.fileName)} ${esc(e.episode)}</div>
-        <div class="file">${esc(e.fileName)}</div>
-        <div class="bar"><i style="width:${pct}%"></i></div>
-        <div class="stat">${stat}</div>
-      </div>
-      <div class="acts"><button class="btn ghost" data-key="${esc(e.key)}">Sil</button></div>
-    </div>`
+    const pct = Math.floor(e.percent)
+    const done = e.state === 'completed'
+    const files = e.files.filter(f => f.selected)
+    const ep = files.length > 1 ? files.length + ' dosya' : (files[0] && files[0].season != null ? 'S' + String(files[0].season).padStart(2,'0') + 'E' + String(files[0].episode).padStart(2,'0') : '')
+    const stat = done ? '✔ Hazır · internetsiz oynar · ' + fmt(e.sizeBytes)
+      : e.state === 'error' ? '✖ ' + esc(e.error)
+      : e.state === 'resolving' ? 'Torrent bilgisi alınıyor…'
+      : e.state === 'paused' ? '⏸ Duraklatıldı · %' + pct + ' · ' + fmt(e.doneBytes) + ' / ' + fmt(e.sizeBytes)
+      : '%' + pct + ' · ' + fmt(e.doneBytes) + ' / ' + fmt(e.sizeBytes) + ' · ' + (e.downloadSpeed/1048576).toFixed(1) + ' MB/sn · ' + e.peers + ' kaynak' + (e.eta != null ? ' · kalan ' + eta(e.eta) : '')
+    const act = done ? '' : (e.state === 'paused' || e.state === 'error') ? '<button class="btn" data-act="resume" data-id="' + e.id + '">Sürdür</button>' : '<button class="btn" data-act="pause" data-id="' + e.id + '">Duraklat</button>'
+    return '<div class="item ' + (done ? 'done' : '') + '">' +
+      (e.poster ? '<img src="' + esc(e.poster) + '" alt="">' : '<div class="ph"></div>') +
+      '<div class="body"><div class="title">' + esc(e.displayName || e.name) + ' ' + esc(ep) + '</div>' +
+      '<div class="file">' + esc(files.length === 1 ? files[0].name : e.name) + '</div>' +
+      '<div class="bar"><i style="width:' + pct + '%"></i></div><div class="stat">' + stat + '</div></div>' +
+      '<div class="acts">' + act + '<button class="btn ghost" data-act="delete" data-id="' + e.id + '">Sil</button></div></div>'
   }).join('')
 }
 
 document.getElementById('list').addEventListener('click', async ev => {
-  const key = ev.target.dataset?.key
-  if (!key || !confirm('Bu indirme ve dosyası silinsin mi?')) return
-  await fetch('/api/delete?key=' + encodeURIComponent(key), { method: 'POST' })
+  const { act, id } = ev.target.dataset || {}
+  if (!act || !id) return
+  if (act === 'delete' && !confirm('Bu indirme ve dosyaları silinsin mi?')) return
+  await fetch('/api/items/' + id + '/' + act, { method: 'POST' })
   load()
 })
 
 load()
-setInterval(load, 3000)
+setInterval(load, 2000)
 </script>
 </body>
 </html>

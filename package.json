@@ -1,16 +1,17 @@
 {
   "name": "stremio-offline",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Stremio için yerel indirme servisi ve eklenti (motor: rqbit)",
+  "main": "server.mjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.mjs",
+    "test": "node --test --test-concurrency=1 test/"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
-  "dependencies": {
-    "webtorrent": "^3.0.21"
+  "engines": {
+    "node": ">=22"
   }
 }

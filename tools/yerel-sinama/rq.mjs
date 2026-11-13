@@ -44,7 +44,9 @@ export const stats = (s, id) => http(s, "GET", `/torrents/${id}/stats/v1`)
 import { DIZIN as _D } from './fixture.mjs'
 export const SEED = { api: 3051, port: 4251 }
 export const T = { buyuk: path.join(_D, 'torrent', 'buyuk.torrent'), paket: path.join(_D, 'torrent', 'paket.torrent') }
-export const IH = { buyuk: '1e609a6a9322459ec45c29745ee564f16203fc29', paket: '9f6435ef019cf560bce4648f5da5457a58f48738' }
+// infoHash'ler uretilen .torrent dosyalarindan okunur (fixture.mjs once calistirilmali)
+import { parseTorrent } from '../../lib/bencode.mjs'
+export const IH = { get buyuk() { return parseTorrent(fs.readFileSync(T.buyuk)).infoHash }, get paket() { return parseTorrent(fs.readFileSync(T.paket)).infoHash } }
 export const KAYNAK = path.join(_D, 'kaynak')
 export const q = o => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
 
