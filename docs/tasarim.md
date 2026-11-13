@@ -36,6 +36,24 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 
 Faz 3 doğrulandıktan sonra durulur ve kullanıcıya gösterilir; Faz 4 ve sonrası onun onayıyla başlar.
 
+## Faz kapsamları (ajan görev tanımı için)
+
+**Faz 1 — indirme çekirdeği (Opus).** Başvuru: `docs/faz0-rapor.md` (rqbit API ve tuhaflıkları), sınama düzeneği `tools/yerel-sinama/`.
+- rqbit servisin alt süreci olur: servis başlatır, sağlığını izler, düşerse yeniden başlatır. rqbit durumu `data/` altında, API yalnızca 127.0.0.1'de.
+- `server.mjs` modüllere bölünür: motor bağdaştırıcısı, indirme yöneticisi, Torrentio katmanı, Stremio eklenti uçları, arayüz API'si.
+- İndirme yöneticisi: ekle (magnet + tracker'lar, dosya seçimi), duraklat, sürdür, iptal, sil; kalıcı kütüphane. Canlı durum: yüzde, anlık hız, kalan süre, bağlı kaynak, öğe boyutu, toplam kullanılan disk, boş disk. İndirme bitince torrent duraklatılır (yükleme yok).
+- Eski kütüphane kayıtları yeni yapıya "duraklatılmış" olarak taşınır; kendiliğinden hiçbir şey inmeye başlamaz.
+- Oynatma ucu: inmekte olan dosya rqbit akışından (Range ve ileri sarma), bitmiş dosya doğrudan diskten sunulur.
+- Torrentio katmanı: film ya da bölüm için sürüm listesi (kalite, GB, seeder, dil, kaynak site); sezon için paket torrentleri ve bölüm bölüm seçenekler, bölüm sayısı ve toplam GB ile. Paket içindeki dosyalar bölümlere eşlenir.
+- Arayüzün kullanacağı HTTP API `docs/api.md` içinde belgelenir (Faz 2 buna göre yazılır).
+- Dayanıklılık: yakalanmamış hata servisi kapatmaz; metadata gelmeyen ekleme zaman aşımına uğrar ve kayıtta hata olarak görünür.
+- Sınama için ortam değişkenleriyle ayrı port, ayrı veri klasörü ve ayrı indirme klasörü seçilebilir. Otomatik sınamalar yerel döngü düzeneğiyle çalışır.
+- Mevcut Stremio eklenti uçları ve `inject.js` düğmeleri çalışmaya devam eder. Sık commit atılır.
+
+**Faz 2 — İndirme Merkezi (Sonnet).** `docs/api.md`'ye göre, servisin sunduğu tek sayfalık arayüz; çatı kütüphane yok, koyu tema, Türkçe. Ekranlar: sürüm seçici, sezon seçici, indirme yöneticisi, İndirilenler. Hem tam sayfa hem Stremio içinde gömülü pencere olarak çalışır; telefonda da kullanılabilir genişlikte.
+
+**Faz 3 — Stremio bağlantısı (Opus).** `inject.js`: film sayfasında "İndir", dizi sayfasında "Sezonu indir" düğmeleri İndirme Merkezi'ni gömülü pencere olarak açar; inmiş içeriklerin posterinde rozet; film sayfasının üstünde "Offline oynat"; İndirilenler'den tıklanan içerik Stremio oynatıcısında yerel dosyadan açılır. Seçiciler Stremio'nun sınıf adlarındaki rastgele eklere bağlı kalmaz; yapı değişmişse betik sessizce bozulmak yerine bunu bildirir. Gömme denemesi (Faz 0'dan ertelendi) bu fazın ilk işidir; iframe engelliyse arayüz ayrı pencerede açılır.
+
 ## Çalışma kuralları
 
 - Orkestratör oturum ürün kodu yazmaz. Zor iş Opus, kolay iş ve sınama Sonnet, çok basit iş Haiku alt ajanına verilir. Ajanlar sırayla çalışır.
