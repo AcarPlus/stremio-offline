@@ -129,3 +129,50 @@ test('K2: tek sezonluk COMPLETE paketi çok sezonlu sayılmaz', async () => {
   assert.equal(MULTI_SEASON.test('Breaking.Bad.SEASON.01.S01.COMPLETE.1080p.BluRay'), false)
   assert.equal(MULTI_SEASON.test('Show S01-S05 COMPLETE'), true)
 })
+
+test('K4: getJson geçici hatada (bağlantı kesilmesi, 5xx) bir kez yeniden dener; 404 denemez', async () => {
+  const http = await import('node:http')
+  const { getJson } = await import('../lib/meta.mjs')
+  let n = 0
+  const srv = http.createServer((req, res) => {
+    n++
+    if (req.url === '/reset' && n === 1) return req.socket.destroy()
+    if (req.url === '/5xx' && n === 1) { res.writeHead(503); return res.end('x') }
+    if (req.url === '/404') { res.writeHead(404); return res.end('x') }
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":1}')
+  })
+  await new Promise(r => srv.listen(0, '127.0.0.1', r))
+  const base = `http://127.0.0.1:${srv.address().port}`
+  try {
+    for (const p of ['/reset', '/5xx']) { n = 0; assert.deepEqual(await getJson(base + p), { ok: 1 }, p); assert.equal(n, 2, p) }
+    n = 0
+    await assert.rejects(getJson(base + '/404'))
+    assert.equal(n, 1)
+  } finally { srv.close() }
+})
+
+test('K7: meta JSON var ama görsel eksikse yalnızca eksik görsel yeniden indirilir; kaldırma sırasında yeniden eklenen içerik silinmez', async () => {
+  const http = await import('node:http'); const os = await import('node:os'); const fs = await import('node:fs'); const path = await import('node:path')
+  const { MetaStore } = await import('../lib/meta.mjs')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-'))
+  const cfg = { metaDir: path.join(dir, 'meta'), imgDir: path.join(dir, 'img') }
+  fs.mkdirSync(cfg.metaDir); fs.mkdirSync(cfg.imgDir)
+  let hits = 0
+  const srv = http.createServer((req, res) => { hits++; if (hits === 1) { res.writeHead(404); return res.end() } res.writeHead(200); res.end('IMG') })
+  await new Promise(r => srv.listen(0, '127.0.0.1', r))
+  const poster = `http://127.0.0.1:${srv.address().port}/p.jpg`
+  try {
+    const store = new MetaStore(cfg)
+    fs.writeFileSync(store.file('tt1'), JSON.stringify({ id: 'tt1', poster }))
+    await store.fetch('movie', 'tt1')
+    assert.ok(!fs.existsSync(path.join(cfg.imgDir, 'tt1-poster')), 'ilk deneme 404')
+    store.imgTried.clear() // 10 dk bekleme geçti say
+    await store.fetch('movie', 'tt1')
+    assert.equal(fs.readFileSync(path.join(cfg.imgDir, 'tt1-poster'), 'utf8'), 'IMG')
+    // kaldırma, içerik yeniden eklenmişse (inUse) hiçbir şey silmez
+    await store.remove('tt1', () => true)
+    assert.ok(fs.existsSync(store.file('tt1')) && fs.existsSync(path.join(cfg.imgDir, 'tt1-poster')))
+    await store.remove('tt1', () => false)
+    assert.ok(!fs.existsSync(store.file('tt1')) && !fs.existsSync(path.join(cfg.imgDir, 'tt1-poster')))
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }) }
+})
