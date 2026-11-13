@@ -62,6 +62,8 @@ async function serveWeb (res, name) {
 }
 
 async function handle (req, res) {
+  // DNS yeniden bağlamaya karşı: Host başlığı servisin kendi adlarından (kendi portuyla) biri olmalı.
+  if (!cfg.allowedHosts.has(String(req.headers.host || '').toLowerCase())) return json(res, 403, { err: 'geçersiz Host' })
   const url = new URL(req.url, cfg.base)
   let parts
   try {
@@ -100,7 +102,7 @@ async function handle (req, res) {
     const [, type, id, infoHash, idxRaw] = parts
     if (!/^[a-f0-9]{40}$/i.test(infoHash)) return json(res, 400, { err: 'geçersiz infoHash' })
     try {
-      return await servePlay(req, res, manager, { infoHash, fileIdx: /^\d+$/.test(idxRaw) ? +idxRaw : null, type, id: id === 'x' ? null : id })
+      return await servePlay(req, res, manager, { infoHash, fileIdx: /^\d+$/.test(idxRaw) ? +idxRaw : null, type, id: id === 'x' ? null : id, create: torrentio.isRecent(infoHash) })
     } catch (e) {
       log('oynatma hatası:', e.message)
       return json(res, e.status && e.status < 600 ? e.status : 502, { err: e.message })

@@ -27,6 +27,8 @@ describe('A: oynatma, duraklat/sürdür, tamamlanınca duraklatma, silme', () =>
   test('oynatma ucu: inmemiş bölgeye ileri sarma (%70) kaynakla bayt bayt aynı', async () => {
     const ih = fx.film.infoHash
     const url = `${svc.base}/play/movie/${IMDB}/${ih}/0`
+    // Oynatma ucu bilinmeyen hash için indirme başlatmaz (K1): öğe önce kütüphaneye eklenir.
+    await svc.api('POST', '/api/items', { infoHash: ih, files: [0], type: 'movie', id: IMDB })
     const start = Math.floor(FILM.size * 0.7) + 12345
     const t0 = Date.now()
     const r = await readRange(url, start, start + MiB - 1)

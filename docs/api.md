@@ -4,6 +4,7 @@ Servis `http://127.0.0.1:11480` adresinde çalışır (yalnızca bu bilgisayarda
 
 Genel kurallar:
 - Gövdeler JSON'dur (`Content-Type` zorunlu değil). Yanıtlar JSON; hata gövdesi `{ "err": "Türkçe açıklama" }`.
+- Tüm uçlar: `Host` başlığı servisin kendi adlarından (`127.0.0.1:port`, `localhost:port`, `[::1]:port`; tek yerde: `cfg.allowedHosts`) biri değilse `403` (DNS yeniden bağlamaya karşı).
 - Hata kodları: `400` geçersiz istek, `403` izin verilmeyen köken, `404` öğe yok, `409` duruma uymayan istek (ör. tamamlanmışı iptal), `413` gövde çok büyük, `502/503/504` motor ya da kaynak sorunu.
 - Köken (Origin) kuralı: `/api/*` uçları servisin kendi sayfasından (ya da kökensiz: curl, sınama) serbest. `https://web.stremio.com` kökeni yalnızca `GET` uçlarını ve `POST /api/download`, `POST /api/auto`'yu çağırabilir. Diğer kökenler `403`.
 - Öğe kimliği (`:id`) torrentin infoHash'idir (40 karakter, küçük harf).
@@ -132,7 +133,7 @@ Notlar:
 ### Oynatma
 - `GET /play/:type/:id/:infoHash/:fileIdx` (`fileIdx` bilinmiyorsa `x`). Stremio'nun kayıtlı adresleriyle aynı biçim.
   - Dosya tamamsa **diskten** sunulur (motor gerekmez, internetsiz çalışır).
-  - Değilse motorun akışından sunulur: `Range` desteklenir, inmemiş bir yere atlamak o bölgeyi öne alır. Öğe yoksa oluşturulur, duraklatılmışsa sürdürülür, dosya seçili değilse seçime eklenir (Stremio'daki "İndir+Oynat" davranışı).
+  - Değilse motorun akışından sunulur: `Range` desteklenir, inmemiş bir yere atlamak o bölgeyi öne alır. Öğe kütüphanede yoksa yalnızca son 6 saatte bir Torrentio listesinde görülmüş hash için oluşturulur (başka hash için `404`, indirme başlamaz); duraklatılmışsa sürdürülür, dosya seçili değilse seçime eklenir (Stremio'daki "İndir+Oynat" davranışı).
   - `HEAD` desteklenir; aralık dışı `416`. Yanıtta `Accept-Ranges: bytes`, `Content-Type` uzantıya göre.
 
 ### Eski uçlar (inject.js ve eski panel için korunur)
