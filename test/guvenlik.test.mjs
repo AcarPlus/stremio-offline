@@ -2,7 +2,11 @@
 import { describe, test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { startService, serviceConfig, cleanService, killAll } from './harness.mjs'
+import fs from 'node:fs'
+import path from 'node:path'
+import { spawn } from 'node:child_process'
+import { startService, serviceConfig, cleanService, killAll, RQBIT, rqbitArgs, TEST_DIR, sleep, waitFor } from './harness.mjs'
+import { Engine } from '../lib/engine.mjs'
 
 /** Ham istek: Host/Origin başlıklarını ve gövdeyi tam denetlemek için http.request. */
 function raw (svc, method, path, { headers = {}, body } = {}) {
@@ -49,5 +53,33 @@ describe('güvenlik ve girdi denetimi', () => {
   test('K1: yabancı köken yönetim uçlarına erişemez', async () => {
     const r = await raw(svc, 'POST', '/api/items', { headers: { Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: JSON.stringify({ infoHash: HASH }) })
     assert.equal(r.status, 403)
+  })
+})
+
+describe('K8: killStale yalnızca kendi rqbit sürecini kapatır', () => {
+  const dir = path.join(TEST_DIR, 'k8')
+  const mk = apiPort => ({ rqbitDir: dir, rqbitApiPort: apiPort, rqbitExe: RQBIT, downloadDir: dir })
+  const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
+  after(() => { killAll(); fs.rmSync(dir, { recursive: true, force: true }) })
+
+  test('başka kapıda çalışan rqbit.exe dokunulmadan kalır, bizimki kapanır', async () => {
+    fs.mkdirSync(dir, { recursive: true })
+    const other = spawn(RQBIT, rqbitArgs({ api: 11781, port: 11782, out: path.join(dir, 'o') }), { stdio: 'ignore', windowsHide: true })
+    const ours = spawn(RQBIT, rqbitArgs({ api: 11783, port: 11784, out: path.join(dir, 'b') }), { stdio: 'ignore', windowsHide: true })
+    try {
+      await sleep(1500)
+      // pid dosyası başkasının rqbit'ini gösteriyor, bizim API kapımız 11783
+      const eng = new Engine(mk(11783))
+      fs.writeFileSync(eng.pidFile, String(other.pid))
+      eng.killStale()
+      await sleep(500)
+      assert.ok(alive(other.pid), 'başka rqbit öldürülmemeli')
+      assert.ok(!fs.existsSync(eng.pidFile))
+      // kendi sürecimiz
+      fs.writeFileSync(eng.pidFile, String(ours.pid))
+      eng.killStale()
+      await waitFor(() => !alive(ours.pid), { timeout: 5000, what: 'kendi rqbit kapandı' })
+      assert.ok(alive(other.pid))
+    } finally { other.kill(); ours.kill() }
   })
 })
