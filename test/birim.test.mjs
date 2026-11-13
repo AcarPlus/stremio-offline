@@ -123,3 +123,9 @@ test('K3: Library.delete büyük harfli anahtarla da kaydı siler', async () => 
     assert.equal(lib.all().length, 0)
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('K2: tek sezonluk COMPLETE paketi çok sezonlu sayılmaz', async () => {
+  const { MULTI_SEASON } = await import('../lib/torrentio.mjs')
+  assert.equal(MULTI_SEASON.test('Breaking.Bad.SEASON.01.S01.COMPLETE.1080p.BluRay'), false)
+  assert.equal(MULTI_SEASON.test('Show S01-S05 COMPLETE'), true)
+})
