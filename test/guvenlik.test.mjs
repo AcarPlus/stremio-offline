@@ -5,7 +5,7 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { startService, serviceConfig, cleanService, killAll, RQBIT, rqbitArgs, TEST_DIR, sleep, waitFor } from './harness.mjs'
+import { startService, serviceConfig, cleanService, killAll, RQBIT, rqbitArgs, TEST_DIR, sleep, waitFor, PORTS } from './harness.mjs'
 import { Engine } from '../lib/engine.mjs'
 
 /** Ham istek: Host/Origin başlıklarını ve gövdeyi tam denetlemek için http.request. */
@@ -86,12 +86,12 @@ describe('K8: killStale yalnızca kendi rqbit sürecini kapatır', () => {
 
   test('başka kapıda çalışan rqbit.exe dokunulmadan kalır, bizimki kapanır', async () => {
     fs.mkdirSync(dir, { recursive: true })
-    const other = spawn(RQBIT, rqbitArgs({ api: 11781, port: 11782, out: path.join(dir, 'o') }), { stdio: 'ignore', windowsHide: true })
-    const ours = spawn(RQBIT, rqbitArgs({ api: 11783, port: 11784, out: path.join(dir, 'b') }), { stdio: 'ignore', windowsHide: true })
+    const other = spawn(RQBIT, rqbitArgs({ api: PORTS.k8, port: PORTS.k8 + 1, out: path.join(dir, 'o') }), { stdio: 'ignore', windowsHide: true })
+    const ours = spawn(RQBIT, rqbitArgs({ api: PORTS.k8 + 2, port: PORTS.k8 + 3, out: path.join(dir, 'b') }), { stdio: 'ignore', windowsHide: true })
     try {
       await sleep(1500)
-      // pid dosyası başkasının rqbit'ini gösteriyor, bizim API kapımız 11783
-      const eng = new Engine(mk(11783))
+      // pid dosyası başkasının rqbit'ini gösteriyor, bizim API kapımız PORTS.k8 + 2
+      const eng = new Engine(mk(PORTS.k8 + 2))
       fs.writeFileSync(eng.pidFile, String(other.pid))
       eng.killStale()
       await sleep(500)

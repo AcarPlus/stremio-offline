@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   startSeeder, startService, serviceConfig, cleanService, startRqbit, silentPeer, engineStats,
-  readRange, waitFor, sleep, rq, killAll, MiB, TEST_DIR
+  readRange, waitFor, sleep, rq, killAll, MiB, TEST_DIR, PORTS
 } from './harness.mjs'
 import { FILM, PACK, sourcePath, readSource } from './fixture.mjs'
 
@@ -93,7 +93,7 @@ describe('A: oynatma, duraklat/sürdür, tamamlanınca duraklatma, silme', () =>
     assert.ok(readSource(file, 0, 4 * MiB).equals(readSource(sourcePath('film'), 0, 4 * MiB)))
     assert.ok(readSource(file, FILM.size - 4 * MiB, 4 * MiB).equals(readSource(sourcePath('film'), FILM.size - 4 * MiB, 4 * MiB)))
     // Yalnızca bu servisi tanıyan bir eş: 6 sn içinde hiçbir bayt alamamalı
-    const leech = await startRqbit({ name: 'leech', api: 3199, port: 4399, out: path.join(TEST_DIR, 'leech-out') })
+    const leech = await startRqbit({ name: 'leech', api: PORTS.leech, port: PORTS.leech + 1, out: path.join(TEST_DIR, 'leech-out') })
     try {
       await rq(leech.base, 'POST', `/torrents?overwrite=true&initial_peers=127.0.0.1:${sc.peerPort}`, fx.film.torrent)
       await sleep(6000)
@@ -233,9 +233,9 @@ describe('C: servis yeniden başlatma (indirme ortasında), motor çökmesi', ()
 })
 
 describe('D: metadata gelmeyen magnet', () => {
-  const sc = serviceConfig(4, { OFFLINE_EXTRA_PEERS: '127.0.0.1:4398', OFFLINE_METADATA_TIMEOUT: '4' })
+  const sc = serviceConfig(4, { OFFLINE_EXTRA_PEERS: `127.0.0.1:${PORTS.silentPeer}`, OFFLINE_METADATA_TIMEOUT: '4' })
   let svc, peer
-  before(async () => { cleanService(sc); peer = silentPeer(4398); svc = await startService(sc) })
+  before(async () => { cleanService(sc); peer = silentPeer(PORTS.silentPeer); svc = await startService(sc) })
   after(async () => { await svc?.stop(); peer?.close() })
 
   test('zaman aşımı öğede hata olarak görünür, servis yanıt vermeye devam eder', async () => {

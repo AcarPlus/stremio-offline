@@ -56,7 +56,31 @@ export async function startRqbit ({ name, api, port, out }) {
   return { name, base, port, proc: p, stop: () => { try { p.kill() } catch {} } }
 }
 
-export const SEED = { api: 3161, port: 4361 }
+/**
+ * Kapılar her çalıştırmada boş bir bloktan alınır (iki `npm test` aynı anda çakışmaz).
+ * Blok: 320 ardışık kapı, hepsi 127.0.0.1'de bağlanabilir olmalı. OFFLINE_TEST_PORT_BASE ile sabitlenebilir.
+ */
+const BLOCK = 320
+async function canBind (port) {
+  return new Promise(resolve => {
+    const s = net.createServer()
+    s.once('error', () => resolve(false))
+    s.listen(port, '127.0.0.1', () => s.close(() => resolve(true)))
+  })
+}
+async function findBase () {
+  if (process.env.OFFLINE_TEST_PORT_BASE) return +process.env.OFFLINE_TEST_PORT_BASE
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const base = 20000 + Math.floor(Math.random() * 30000)
+    let ok = true
+    for (let i = 0; i < BLOCK && ok; i++) ok = await canBind(base + i)
+    if (ok) return base
+  }
+  throw new Error('boş kapı bloğu bulunamadı')
+}
+export const PORT_BASE = await findBase()
+export const PORTS = { seedApi: PORT_BASE, seedPeer: PORT_BASE + 1, silentPeer: PORT_BASE + 2, leech: PORT_BASE + 6, k8: PORT_BASE + 4 }
+export const SEED = { api: PORTS.seedApi, port: PORTS.seedPeer }
 export const SEED_PEER = `127.0.0.1:${SEED.port}`
 
 /** Tohumlayıcı: fixture'ları üretir, iki torrenti de tam olarak sunar. */
@@ -91,15 +115,15 @@ export function serviceConfig (n, extra = {}) {
     n,
     dataDir,
     downloadDir,
-    port: 11590 + n,
-    rqbitPort: 3170 + n,
-    peerPort: 4370 + n,
+    port: PORT_BASE + 10 + n,
+    rqbitPort: PORT_BASE + 110 + n,
+    peerPort: PORT_BASE + 210 + n,
     env: {
       OFFLINE_DATA_DIR: dataDir,
       OFFLINE_DOWNLOAD_DIR: downloadDir,
-      OFFLINE_PORT: String(11590 + n),
-      OFFLINE_RQBIT_PORT: String(3170 + n),
-      OFFLINE_PEER_PORT: String(4370 + n),
+      OFFLINE_PORT: String(PORT_BASE + 10 + n),
+      OFFLINE_RQBIT_PORT: String(PORT_BASE + 110 + n),
+      OFFLINE_PEER_PORT: String(PORT_BASE + 210 + n),
       OFFLINE_LOOPBACK: '1',
       OFFLINE_NO_INJECT: '1',
       OFFLINE_STDIN_CONTROL: '1',
