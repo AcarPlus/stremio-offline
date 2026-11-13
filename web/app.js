@@ -449,7 +449,7 @@ async function viewSurum (root, type, id, current) {
 
   function kur () {
     const vs = data.versions
-    const st = { key: 'seeders', dir: -1, quality: 'hepsi', lang: 'hepsi' }
+    const st = { key: 'seeders', dir: -1, quality: 'hepsi', lang: 'hepsi', limit: 80 }
     if (!vs.length) { govde.append(h('div', { class: 'bos-liste' }, 'Bu içerik için hiç sürüm bulunamadı.')); return }
     const quals = [...new Set(vs.map(v => v.quality || '?'))].sort((a, b) => QUALITY_RANK(b) - QUALITY_RANK(a))
     const langs = [...new Set(vs.flatMap(v => v.languages || []))].sort((a, b) => (b === 'tr') - (a === 'tr') || a.localeCompare(b))
@@ -473,7 +473,7 @@ async function viewSurum (root, type, id, current) {
       if (sortSel.value !== `${st.key}:${st.dir}`) sortSel.selectedIndex = -1
     }
     sortSel.addEventListener('change', () => { const [k, d] = sortSel.value.split(':'); st.key = k; st.dir = +d; syncSort(); ciz() })
-    langSel.addEventListener('change', () => { st.lang = langSel.value; ciz() })
+    langSel.addEventListener('change', () => { st.lang = langSel.value; st.limit = 80; ciz() })
     qChips.forEach(c => c.addEventListener('click', () => { st.quality = c.dataset.q; qChips.forEach(x => x.setAttribute('aria-pressed', String(x === c))); ciz() }))
 
     govde.append(
@@ -489,7 +489,9 @@ async function viewSurum (root, type, id, current) {
       const f = keyVal[st.key]
       l = [...l].sort((a, b) => st.dir * (f(a) - f(b)) || b.seeders - a.seeders)
       sayac.textContent = l.length + ' / ' + vs.length + ' sürüm'
-      tbody.replaceChildren(...(l.length ? l.map(satir) : [h('tr', null, h('td', { colspan: '7' }, 'Bu süzgece uyan sürüm yok.'))]))
+      const rows = l.slice(0, st.limit).map(satir)
+      if (l.length > st.limit) rows.push(h('tr', null, h('td', { colspan: '7' }, h('button', { class: 'dugme gri', onclick: () => { st.limit += 80; ciz() } }, `Daha fazla göster (${l.length - st.limit} sürüm daha)`))))
+      tbody.replaceChildren(...(l.length ? rows : [h('tr', null, h('td', { colspan: '7' }, 'Bu süzgece uyan sürüm yok.'))]))
     }
     ciz()
 
@@ -539,8 +541,8 @@ async function viewSurum (root, type, id, current) {
       doldur()
       const adSatiri = h('td', { class: 'ad', 'data-et': 'Ad' }, h('b', null, v.name || '—'), v.fileName && v.fileName !== v.name ? h('div', null, v.fileName) : null, h('div', null, tags))
       return h('tr', null,
-        td('Kalite', 'kalite', v.quality || '?', v.kind === 'pack' ? h('span', { class: 'etiket', title: 'Bu bölüm bir sezon paketinin içinden indirilir; yalnızca bu bölümün dosyası inecek.' }, 'paketten') : null),
-        td('Boyut', 'say', v.sizeGB ? v.sizeGB.toFixed(2) + ' GB' : '—'),
+        td('Kalite', 'kalite', v.quality || '?', v.kind === 'pack' ? h('span', { class: 'etiket', title: 'Bu bölüm bir sezon paketinin içinden indirilir; yalnızca bu bölümün dosyası inecek. Bildirilen boyut bölümün ya da tüm paketin boyutu olabilir.' }, 'paketten') : null),
+        td('Boyut', 'say', v.sizeGB ? (v.kind === 'pack' ? '≈ ' : '') + v.sizeGB.toFixed(2) + ' GB' : '—'),
         td('Kaynak', 'say', String(v.seeders ?? 0)),
         td('Dil', '', lang.length ? lang : h('span', { class: 'soluk', title: 'Dil bilgisi verilmemiş (çoğunlukla yalnız İngilizce)' }, '—')),
         td('Site', '', v.source || '—'),
