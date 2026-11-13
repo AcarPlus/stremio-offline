@@ -90,7 +90,7 @@ async function handle (req, res) {
     } catch (e) {
       const code = e.status && e.status >= 400 && e.status < 600 ? e.status : 500
       if (code >= 500) log('API hatası:', req.method, req.url, '-', e.message)
-      return json(res, code, { err: e.message })
+      return json(res, code, { err: e.message }, code === 413 ? { Connection: 'close' } : {})
     }
   }
 

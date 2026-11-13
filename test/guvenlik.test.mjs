@@ -56,6 +56,28 @@ describe('güvenlik ve girdi denetimi', () => {
   })
 })
 
+describe('K5/K6: gövde denetimi', () => {
+  const sc = serviceConfig(97)
+  let svc
+  before(async () => { cleanService(sc); svc = await startService(sc) })
+  after(async () => { await svc?.stop(); killAll(); cleanService(sc) })
+
+  test('K5: 3 MB gövde 413 yanıtı alır (bağlantı kopmaz)', async () => {
+    const r = await raw(svc, 'POST', '/api/items', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x: 'a'.repeat(3e6) }) })
+    assert.equal(r.status, 413)
+    assert.match(r.text, /çok büyük/)
+    assert.equal((await svc.api('GET', '/api/status')).engine !== undefined, true, 'servis yanıt vermeye devam eder')
+  })
+
+  test('K6: null / sayı / dizge gövde 400, iç hata metni sızmaz', async () => {
+    for (const body of ['null', '5', '"x"', '{bozuk']) {
+      const r = await raw(svc, 'POST', '/api/items', { headers: { 'Content-Type': 'application/json' }, body })
+      assert.equal(r.status, 400, body)
+      assert.ok(!/Cannot read/.test(r.text), body)
+    }
+  })
+})
+
 describe('K8: killStale yalnızca kendi rqbit sürecini kapatır', () => {
   const dir = path.join(TEST_DIR, 'k8')
   const mk = apiPort => ({ rqbitDir: dir, rqbitApiPort: apiPort, rqbitExe: RQBIT, downloadDir: dir })
