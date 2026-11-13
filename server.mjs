@@ -151,6 +151,10 @@ function shutdown (code = 0) {
 }
 process.on('SIGINT', () => shutdown(0))
 process.on('SIGTERM', () => shutdown(0))
+// Windows: konsol penceresi kapatılınca (SIGHUP) ya da Ctrl+Break (SIGBREAK) da temiz kapan;
+// zorla öldürülürse rqbit açık kalır ve bir sonraki açılışta kapatılır (data/rqbit/rqbit.pid).
+process.on('SIGHUP', () => shutdown(0))
+process.on('SIGBREAK', () => shutdown(0))
 process.on('exit', () => { try { engine.stop() } catch {} })
 // Sınama ve dış denetim için: stdin'den "kapat" satırı gelirse temiz kapanır.
 if (process.env.OFFLINE_STDIN_CONTROL === '1') {
