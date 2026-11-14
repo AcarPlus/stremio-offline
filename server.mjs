@@ -26,6 +26,18 @@ process.on('uncaughtException', e => log('yakalanmamış hata:', e))
 process.on('unhandledRejection', e => log('yakalanmamış ret:', e))
 
 const cfg = loadConfig()
+
+// Servis zaten çalışıyorsa (oturum açılışı kısayolu + elle başlatma gibi) sessizce çık:
+// ne motoru başlatır ne de çalışan servisin motoruna dokunur.
+async function alreadyRunning (c) {
+  try {
+    const r = await fetch(`${c.base}/manifest.json`, { signal: AbortSignal.timeout(1500) })
+    const m = await r.json()
+    return r.ok && typeof m.id === 'string' && /offline/i.test(m.id)
+  } catch { return false }
+}
+if (await alreadyRunning(cfg)) process.exit(0)
+
 setLogFile(path.join(cfg.dataDir, 'servis.log'))
 const engine = new Engine(cfg)
 const library = new Library(cfg.libFile).load()
@@ -137,7 +149,12 @@ const server = http.createServer((req, res) => {
 })
 
 server.on('error', e => {
-  log(e.code === 'EADDRINUSE' ? `Port ${cfg.port} kullanımda — servis zaten çalışıyor olabilir.` : 'sunucu hatası: ' + e.message)
+  if (e.code === 'EADDRINUSE') {
+    // Yarış: iki örnek aynı anda başladı. Diğeri çalışıyor; motora dokunmadan sessizce çık.
+    log(`Port ${cfg.port} kullanımda — servis zaten çalışıyor, bu örnek çıkıyor.`)
+    process.exit(0)
+  }
+  log('sunucu hatası: ' + e.message)
   shutdown(1)
 })
 
