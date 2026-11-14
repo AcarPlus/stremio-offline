@@ -19,7 +19,8 @@ const IMDB = 'tt0000001'
 const seedUploaded = async ih => (await rq(seed.base, 'GET', `/torrents/${ih}/stats/v1`)).uploaded_bytes
 
 describe('A: oynatma, duraklat/sürdür, tamamlanınca duraklatma, silme', () => {
-  const sc = serviceConfig(1)
+  // Oynatma muafiyeti bekleme süresi kapalı: film kayıtlı sınırında insin (yoksa saniyeler içinde biter)
+  const sc = serviceConfig(1, { OFFLINE_PLAY_GRACE_MS: '1' })
   let svc
   let peerPort // bu indirmenin motor sürecinin eş kapısı
   before(async () => { cleanService(sc); svc = await startService(sc) })
