@@ -96,7 +96,7 @@ Notlar:
 - `POST /api/items/:id/files` gövde `{ "files": [0, 2, 3] }` → öğe. Seçimi değiştirir (paketten bölüm ekle/çıkar). Tamamlanmış öğeye yeni dosya eklemek indirmeyi sürdürür.
 
 ### Hız sınırı
-Birim **bayt/sn**, `0` = sınırsız, en çok 4294967295. Geçersiz değer `400`.
+Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı** (`typeof number`), tam sayı ve `0` ya da `1000`–`4294967295` olmalı; dize, bool, dizi, kesirli, 1000'den küçük pozitif ya da negatif değer `400`. `POST /api/settings` önce bütün alanları doğrular, sonra uygular (geçersiz alan varsa hiçbiri uygulanmaz, `400`). `applyToAll` yalnız `true` (boolean) iken etkilidir.
 - `POST /api/items/:id/limit` gövde `{ "downloadLimit": 2000000 }` → öğe. Bu indirmenin indirme sınırı. Çalışan sürece **hemen** uygulanır (süreç yeniden başlamaz); öğede saklanır, yeniden başlatmada korunur. Duraklatılmış/hatalı öğede kaydedilir, sürdürülünce geçerli olur.
 - `GET /api/settings` → `{ defaultDownloadLimit, uploadLimit, priorityThrottle }`.
 - `POST /api/settings` gövde (alanların hepsi isteğe bağlı) `{ "defaultDownloadLimit": 0, "uploadLimit": 100000, "applyToAll": true }` → ayarlar.

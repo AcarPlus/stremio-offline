@@ -78,7 +78,10 @@ function limitPicker ({ presets, unit = 'MB', label, onSet, okText }) {
     const t = String(inp.value).trim().replace(',', '.')
     const x = /^\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN
     if (!(x >= 0)) { toast('Geçerli bir sayı yaz (0 = sınırsız).', 'hata'); inp.focus(); return }
-    showCustom(false); apply(Math.round(x * mult))
+    const v = Math.round(x * mult)
+    // Sunucu katıdır: 0 (sınırsız) ya da 1000..4294967295 bayt/sn. Çok küçük pozitif değer sessizce 0'a (sınırsız) yuvarlanmaz.
+    if (v !== 0 && (v < 1000 || v > 4294967295)) { toast('Hız sınırı en az 1 KB/sn ve en çok 4000 MB/sn olabilir (0 = sınırsız).', 'hata'); inp.focus(); return }
+    showCustom(false); apply(v)
   }
   ok.addEventListener('click', fromInput)
   inp.addEventListener('keydown', e => {
