@@ -20,6 +20,7 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 - `web/`: İndirme Merkezi (Faz 2; `index.html`, `stil.css`, `app.js`). Servis kökünde sunulur; belge: `docs/api.md` "İndirme Merkezi arayüzü".
 - `test/`: yerel döngü sınamaları (`npm test`).
 - `inject.js`: akış sağ tık menüsüne ve kart üç nokta menüsüne "Cihaza indir" ekler. Stremio'nun hata ayıklama kapısı (11481) üzerinden yüklenir.
+  Faz 3: film sayfasında "İndir", dizi sayfasında "Sezonu indir" (İndirme Merkezi iframe'de, `?embed=1`), poster rozeti, inmiş filmde "Offline oynat", `oynat` iletisiyle Stremio oynatıcısında yerel dosya. Sınıf köküne tutunur, yapı değişince uyarır; saf kısmı `test/inject.test.mjs`. Ayrıntı: `docs/faz3-rapor.md`.
 - `stremio-baslat.ps1`: servisi ve Stremio'yu kapı açık şekilde başlatır.
 - `tools/cdp-eval.mjs`, `tools/cdp-run.mjs`: Stremio sayfasında JS çalıştıran yardımcılar.
 - `docs/faz0-rapor.md`: motor ölçümü ve rqbit API başvurusu (Faz 0 çıktısı).
