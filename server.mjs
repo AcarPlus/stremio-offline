@@ -1,5 +1,5 @@
 // Stremio "Offline İndir" — yerel eklenti + indirme servisi (motor: rqbit).
-// Modüller: lib/engine (rqbit alt süreci), lib/manager (indirme yöneticisi), lib/torrentio,
+// Modüller: lib/engine (rqbit alt süreci), lib/pool (indirme başına motor süreçleri), lib/manager (indirme yöneticisi), lib/torrentio,
 // lib/addon (Stremio uçları), lib/api (arayüz API'si, docs/api.md), lib/play (oynatma).
 //
 // Sınama için ortam değişkenleri: OFFLINE_PORT, OFFLINE_DATA_DIR, OFFLINE_DOWNLOAD_DIR,
@@ -11,7 +11,9 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { loadConfig } from './lib/config.mjs'
 import { log, setLogFile } from './lib/log.mjs'
-import { Engine } from './lib/engine.mjs'
+import { EnginePool } from './lib/pool.mjs'
+import { Settings } from './lib/settings.mjs'
+import { migrateSession } from './lib/gecis.mjs'
 import { Library } from './lib/library.mjs'
 import { MetaStore } from './lib/meta.mjs'
 import { Manager } from './lib/manager.mjs'
@@ -39,10 +41,18 @@ async function alreadyRunning (c) {
 if (await alreadyRunning(cfg)) process.exit(0)
 
 setLogFile(path.join(cfg.dataDir, 'servis.log'))
-const engine = new Engine(cfg)
 const library = new Library(cfg.libFile).load()
+// Tek motorlu eski düzenden geçiş (bir kez; eski oturum klasörü yedeklenir, silinmez)
+try { migrateSession(cfg, library) } catch (e) { log('geçiş hatası:', e.message) }
+const settings = new Settings(cfg)
 const meta = new MetaStore(cfg)
-const manager = new Manager({ cfg, engine, library, meta })
+let manager = null
+const pool = new EnginePool(cfg, {
+  limitsFor: ih => manager.limitsFor(ih),
+  controlLimits: () => ({ down: 0, up: settings.get().uploadLimit }),
+  slotsInUse: () => new Set(library.all().map(i => i.slot).filter(Number.isInteger))
+})
+manager = new Manager({ cfg, pool, library, meta, settings })
 const torrentio = new Torrentio(cfg, meta)
 const addon = new Addon({ cfg, manager, torrentio, meta })
 const api = new Api({ cfg, manager, torrentio })
@@ -164,7 +174,9 @@ server.listen(cfg.port, '127.0.0.1', () => {
   log(`İndirme klasörü: ${cfg.downloadDir}`)
   if (cfg.testMode) log('Sınama kipi: veri klasörü', cfg.dataDir)
   manager.start()
-  engine.start().catch(e => log('motor başlatılamadı:', e.message))
+  // Önce eski süreçler (pid kaydından) kapatılır, sonra kontrol motoru ve inmekte olan öğelerin motorları başlar.
+  pool.start().catch(e => log('motor başlatılamadı:', e.message))
+  manager.startup()
   if (cfg.inject) stopInjector = startInjector(cfg)
 })
 
@@ -175,17 +187,18 @@ function shutdown (code = 0) {
   log('servis kapanıyor')
   try { stopInjector?.() } catch {}
   try { manager.stop() } catch {}
-  try { engine.stop() } catch {}
+  try { pool.stopAll() } catch {}
   try { server.close() } catch {}
   setTimeout(() => process.exit(code), 300)
 }
 process.on('SIGINT', () => shutdown(0))
 process.on('SIGTERM', () => shutdown(0))
 // Windows: konsol penceresi kapatılınca (SIGHUP) ya da Ctrl+Break (SIGBREAK) da temiz kapan;
-// zorla öldürülürse rqbit açık kalır ve bir sonraki açılışta kapatılır (data/rqbit/rqbit.pid).
+// zorla öldürülürse rqbit süreçleri açık kalır ve bir sonraki açılışta pid dosyalarından kapatılır
+// (data/rqbit/rqbit.pid, data/rqbit/motorlar/<yuva>/rqbit.pid).
 process.on('SIGHUP', () => shutdown(0))
 process.on('SIGBREAK', () => shutdown(0))
-process.on('exit', () => { try { engine.stop() } catch {} })
+process.on('exit', () => { try { pool.stopAll() } catch {} })
 // Sınama ve dış denetim için: stdin'den "kapat" satırı gelirse temiz kapanır.
 if (process.env.OFFLINE_STDIN_CONTROL === '1') {
   process.stdin.setEncoding('utf8')

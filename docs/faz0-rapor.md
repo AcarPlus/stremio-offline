@@ -35,7 +35,7 @@ Yöntem: internet trafiği üretilmeden, hepsi 127.0.0.1 üzerinde iki rqbit sü
 | 6 | Ekleme yolları | **geçti**; "duraklatılmış ekle" HTTP'de yok (kaldı) |
 | 7 | Metadata gelmeyen magnet | **kısmen**: istemci iptali ve temizlik doğrulandı; DHT'li sonsuz bekleme internetsiz üretilemedi, **ertelendi** |
 | 8 | Tamamlanınca dosya ve yükleme | **geçti** |
-| 9 | Çalışma anında limit değişikliği | **kaldı**: API'de uç nokta yok; stats alanları teyit edildi |
+| 9 | Çalışma anında limit değişikliği | **geçti (2026-11-14 düzeltmesi)**: `GET/POST /torrents/limits` var (süreç geneli); torrent başına yok |
 | 10 | Operasyonel | **geçti** (güvenlik duvarı istemi gözlenemedi) |
 
 ### Ayrıntılı sonuçlar
@@ -95,7 +95,7 @@ Yöntem: internet trafiği üretilmeden, hepsi 127.0.0.1 üzerinde iki rqbit sü
   - Önerilen kural: indirme biter bitmez (`finished:true`) `pause`; "Offline oynat" dosyadan okur, rqbit'e gerek yok.
 
 **9. Çalışma anında limit ve stats**
-- İndirme/yükleme limitini API ile değiştirmek **mümkün değil** (12 olası uç nokta `404`; `GET /` listesinde limit ucu yok). Limitler yalnızca başlangıç bayrağıdır (`--ratelimit-download`, `--ratelimit-upload`, bayt/sn, sıfırdan büyük); değiştirmek için rqbit yeniden başlatılır (torrentler geri gelir, madde 3).
+- **Düzeltme (2026-11-14):** Faz 0b sınaması bu yolu denememişti. rqbit 9.1.0'da `GET /torrents/limits` → `{"upload_bps":null,"download_bps":null}` ve `POST /torrents/limits` (gövde JSON, `Content-Type: application/json` zorunlu, yoksa `415`) **süreç geneli** sınırı çalışırken değiştirir. Ölçüldü: birim **bayt/sn** (`download_bps: 1048576` → 1,00 MiB/s; 2097152 → 2,08 MiB/s); sınırsız = `null`; **gönderilmeyen alan da sınırsız olur** (her istekte iki alan birlikte gönderilmeli); `0`, ondalık ve dizge `422` ("expected a nonzero u32"). Başlangıç bayrakları (`--ratelimit-download`, `--ratelimit-upload`, bayt/sn, sıfırdan büyük) aynı değeri verir. **Torrent başına sınır HTTP'de yok**: `POST /torrents` sorgusunda `ratelimit_download`, `download_bps`, `ratelimits.download_bps`, `ratelimits[download_bps]`, `ratelimits={json}` denendi, hepsi sessizce yok sayıldı. Bu yüzden indirme başına sınır, indirme başına ayrı rqbit süreciyle yapıldı (bkz. tasarim.md). Aynı anda üç süreç DHT açık (`--disable-dht-persistence`) sorunsuz çalıştı: her biri rastgele bir UDP kapısında DHT açtı, `GET /dht/stats` routing tablosu 62/98/82.
 - `GET /torrents/{id}/stats/v1` alanları (indirirken): `state` (gözlenen: `initializing`, `live`, `paused`; `error` durumu üretemedim), `error` (hep `null` görüldü), `progress_bytes`, `total_bytes` (seçime göre), `finished`, `file_progress[]`, `uploaded_bytes`, `live` (`paused` iken `null`) içinde: `download_speed.mbps` (**birim MiB/s**: 4 MiB/s limitte `3.997` ve `"4.00 MiB/s"`; alan adı yanıltıcı, yeniden teyit), `upload_speed`, `snapshot.peer_stats.live` (peer), `snapshot.fetched_bytes`, `time_remaining` = `{"duration":{"secs":371,"nanos":483000000},"human_readable":"6m 11s"}` (bitince `null`).
 - `GET /stats` genel hız/peer/sayaç; `GET /torrents/{id}/peer_stats` peer başına sayaç.
 
@@ -145,11 +145,11 @@ Hata biçimi: `{"error_kind","human_readable","status","status_text"}`; bilinmey
 
 1. webtorrent bu ortamda hiç metadata alamadı (iki koşu). Sebep teşhis edilmedi; gece yeniden denenmeli.
 2. rqbit peer portunu (4240) varsayılan olarak tüm arayüzlerde açar ve UPnP dener; `--listen-ip 127.0.0.1 --disable-upnp-port-forward` bunu kısıtlar, ama `--disable-dht` iken bile rastgele bir UDP port `0.0.0.0`/`[::]` üzerinde açılır. Güvenlik duvarı istemi gözlenemedi (sistem ayarına dokunulmadı).
-3. rqbit DHT önbelleğini kullanıcı profili altında (`rqbit\dht\cache\dht.json`) tutar, proje `data\` dışına yazar; `--disable-dht-persistence` ile kapatılır. Aynı anda ikinci rqbit örneği DHT portunda çakışabilir.
+3. rqbit DHT önbelleğini kullanıcı profili altında (`rqbit\dht\cache\dht.json`) tutar, proje `data\` dışına yazar; `--disable-dht-persistence` ile kapatılır. Aynı anda ikinci rqbit örneği DHT portunda çakışabilir; **`--disable-dht-persistence` ile çakışmadığı 2026-11-14'te ölçüldü** (üç süreç, her biri rastgele UDP kapısı).
 4. Açılışta DHT bootstrap DNS çözümü bir kez "no such host" hatası verdi, sonra çalıştı.
 5. `download_speed.mbps` alan adı yanıltıcı: değerler MiB/s.
 6. `POST /torrents` metadata gelene dek bloklar; sunucu tarafı zaman aşımı yok. İstemci iptali temiz bırakıyor (madde 7), DHT'li gerçek sonsuz bekleme ertelendi.
-- (Faz 0b) Başlatılamayan torrent yeniden başlatmada API'den sessizce düşer (yalnızca günlükte `ERROR`); `initial_peers` kalıcı değil; HTTP'de duraklatılmış ekleme yok; çalışma anında hız limiti değiştirilemez; seçilen dosyalar diskte tam boyutta sparse görünür.
+- (Faz 0b) Başlatılamayan torrent yeniden başlatmada API'den sessizce düşer (yalnızca günlükte `ERROR`); `initial_peers` kalıcı değil; HTTP'de duraklatılmış ekleme yok; çalışma anında hız limiti yalnızca süreç geneli değiştirilebilir (`/torrents/limits`, sonradan bulundu); seçilen dosyalar diskte tam boyutta sparse görünür.
 7. Hız tek koşuda 0,8-6,9 MiB/s arasında dalgalandı; karşılaştırma için çok koşu gerek.
 8. Test ISO'su 6,25 GB (istenen 2-6 GB aralığının hafif üstü); yalnızca ~0,5 GB indirildi ve silindi.
 

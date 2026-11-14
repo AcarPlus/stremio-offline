@@ -41,6 +41,58 @@ function fmtEta (s) {
   return s + ' sn'
 }
 
+// ───────────────────────── hız sınırı seçici ─────────────────────────
+// Değerler bayt/sn; 0 = sınırsız. Hazır seçenekler + "Elle gir…" (MB/sn ya da KB/sn).
+const MB = 1e6
+const DL_PRESETS = [[0, 'Sınırsız'], [1 * MB, '1 MB/sn'], [2 * MB, '2 MB/sn'], [5 * MB, '5 MB/sn'], [10 * MB, '10 MB/sn']]
+const UL_PRESETS = [[0, 'Sınırsız'], [50e3, '50 KB/sn'], [100e3, '100 KB/sn'], [250e3, '250 KB/sn'], [500e3, '500 KB/sn'], [1 * MB, '1 MB/sn']]
+const fmtLimit = n => (n > 0 ? fmtSpeed(n) : 'Sınırsız')
+function limitPicker ({ presets, unit = 'MB', label, onSet, okText }) {
+  const mult = unit === 'MB' ? MB : 1e3
+  const sel = h('select', { 'aria-label': label, title: label })
+  // Metin kutusu (inputmode=decimal): "0,5" gibi virgüllü değer de kabul edilir
+  const inp = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', class: 'sinirSayi', hidden: true, placeholder: '0 = sınırsız', 'aria-label': label + ' (' + unit + '/sn, 0 = sınırsız)' })
+  const birim = h('span', { class: 'soluk', hidden: true }, unit + '/sn')
+  const ok = h('button', { type: 'button', class: 'dugme kucuk gri', hidden: true }, 'Uygula')
+  let current = null
+  let busy = false
+  function fill (v) {
+    const known = presets.some(([n]) => n === v)
+    sel.replaceChildren(...presets.map(([n, t]) => h('option', { value: String(n) }, t)),
+      known || v == null ? null : h('option', { value: String(v) }, fmtLimit(v)),
+      h('option', { value: 'ozel' }, 'Elle gir…'))
+    if (v != null) sel.value = String(v)
+  }
+  const custom = () => !inp.hidden
+  const showCustom = on => { inp.hidden = birim.hidden = ok.hidden = !on }
+  async function apply (v) {
+    busy = true; sel.disabled = true
+    try { await onSet(v); current = v; fill(v); if (okText) toast(okText(v), 'ok') } catch (e) { toast(e.message, 'hata'); fill(current) } finally { busy = false; sel.disabled = false }
+  }
+  sel.addEventListener('change', () => {
+    if (sel.value === 'ozel') { showCustom(true); inp.value = current > 0 ? String(+(current / mult).toFixed(2)).replace('.', ',') : ''; inp.focus(); inp.select(); return }
+    showCustom(false); apply(Number(sel.value))
+  })
+  const fromInput = () => {
+    const t = String(inp.value).trim().replace(',', '.')
+    const x = /^\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN
+    if (!(x >= 0)) { toast('Geçerli bir sayı yaz (0 = sınırsız).', 'hata'); inp.focus(); return }
+    showCustom(false); apply(Math.round(x * mult))
+  }
+  ok.addEventListener('click', fromInput)
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); fromInput() }
+    if (e.key === 'Escape') { e.stopPropagation(); showCustom(false); fill(current) }
+  })
+  fill(null)
+  return {
+    el: h('span', { class: 'sinirSecici' }, sel, inp, birim, ok),
+    /** Sunucudan gelen değer (kullanıcı seçerken ya da elle girerken dokunulmaz) */
+    set (v) { if (v === current || busy || custom() || document.activeElement === sel) return; current = v; fill(v) },
+    get value () { return current }
+  }
+}
+
 async function api (path, opts) {
   let r
   try { r = await fetch(path, opts) } catch { throw new Error('Servise ulaşılamıyor. İndirme servisi çalışıyor mu?') }
@@ -172,6 +224,28 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   const cards = new Map()
   let items = []
 
+  // Hız sınırları: yeni indirmeler için varsayılan (+ hepsine uygula) ve yükleme sınırı (bütün indirmeler)
+  const varsayilan = limitPicker({
+    presets: DL_PRESETS, label: 'Yeni indirmeler için hız sınırı',
+    onSet: v => post('/api/settings', { defaultDownloadLimit: v }),
+    okText: v => 'Yeni indirmeler için hız sınırı: ' + fmtLimit(v)
+  })
+  const yukleme = limitPicker({
+    presets: UL_PRESETS, unit: 'KB', label: 'Yükleme sınırı',
+    onSet: v => post('/api/settings', { uploadLimit: v }),
+    okText: v => 'Yükleme sınırı: ' + fmtLimit(v)
+  })
+  const hepsine = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Varsayılan sınırı bütün indirmelere uygula' }, 'Hepsine uygula')
+  hepsine.addEventListener('click', async () => {
+    const r = await onayla({ baslik: 'Hepsine uygulansın mı?', metin: `Her indirmenin hız sınırı ${fmtLimit(varsayilan.value)} olur. Tek tek seçtiğin sınırlar değişir.`, tamam: 'Uygula' })
+    if (!r.ok) return
+    hepsine.disabled = true
+    try { await post('/api/settings', { applyToAll: true }); toast('Bütün indirmelerin hız sınırı: ' + fmtLimit(varsayilan.value), 'ok'); await tick() } catch (e) { toast(e.message, 'hata') } finally { hepsine.disabled = false }
+  })
+  const sinirAyar = h('div', { class: 'araclar sinirlar' },
+    h('span', { class: 'sinirEtiket' }, 'Yeni indirmeler için hız sınırı', varsayilan.el), hepsine,
+    h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el))
+
   root.append(
     h('h1', null, baslik),
     h('p', { class: 'soluk', style: 'margin:0 0 10px' }, 'Cihazına indirilen filmler ve diziler. Bitenler internetsiz de oynar.'),
@@ -181,6 +255,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       h('div', null, strip.bos, h('span', null, 'Diskte boş alan')),
       h('div', null, strip.hiz, h('span', null, 'Toplam hız')),
       h('div', null, strip.aktif, h('span', null, 'Etkin indirme'))),
+    sinirAyar,
     h('div', { class: 'suzgec' }, chips),
     list, bos)
 
@@ -209,6 +284,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     set(strip.bos, s.diskFreeBytes != null ? fmtBytes(s.diskFreeBytes) : '—')
     set(strip.hiz, fmtSpeed(s.downloadSpeed))
     set(strip.aktif, String(s.active))
+    if (s.settings) { varsayilan.set(s.settings.defaultDownloadLimit); yukleme.set(s.settings.uploadLimit) }
     motorUyari.hidden = !s.engine || s.engine.ready !== false ? true : false
     if (s.engine && s.engine.ready === false && s.engine.error) motorUyari.textContent = 'İndirme motoru hazır değil: ' + s.engine.error
   }
@@ -263,6 +339,12 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     const sYuzde = h('span', { class: 'yuzde' }), sHiz = h('span'), sKalan = h('span'), sKaynak = h('span'), sBoyut = h('span'), sKalite = h('span')
     const istat = h('div', { class: 'istat' }, sYuzde, sHiz, sKalan, sKaynak, sBoyut, sKalite)
     const hata = h('div', { class: 'hata', hidden: true })
+    const sinir = limitPicker({
+      presets: DL_PRESETS, label: 'Bu indirmenin hız sınırı',
+      onSet: v => post(`/api/items/${it.id}/limit`, { downloadLimit: v }),
+      okText: v => 'Hız sınırı: ' + fmtLimit(v)
+    })
+    const sinirSatiri = h('div', { class: 'sinirSatiri' }, h('span', { class: 'soluk' }, 'Hız sınırı'), sinir.el)
     const dosyaListe = h('div')
     const det = h('details', { class: 'dosyalar', hidden: true }, h('summary', null, 'Bölümler'), dosyaListe)
     const btn = {
@@ -273,7 +355,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       sil: h('button', { class: 'dugme hayalet', 'data-a': 'sil' }, 'Sil')
     }
     const eylem = h('div', { class: 'eylemler' }, Object.values(btn))
-    const el = h('article', { class: 'kart' }, afis, h('div', { class: 'govde' }, h('div', { class: 'baslikSatiri' }, baslik, bolum, rozet), dosya, cubuk, istat, hata, det), eylem)
+    const el = h('article', { class: 'kart' }, afis, h('div', { class: 'govde' }, h('div', { class: 'baslikSatiri' }, baslik, bolum, rozet), dosya, cubuk, istat, sinirSatiri, hata, det), eylem)
     eylem.addEventListener('click', e => { const b = e.target.closest('button[data-a]'); if (b) act(it, b.dataset.a, b) })
     const fileRows = new Map()
 
@@ -305,6 +387,8 @@ function viewHome (root, current, baslik = 'İndirmeler') {
         hata.hidden = !t
         hata.textContent = t ? errorText(t) : ''
       })
+      sinirSatiri.hidden = done // bitmiş indirmenin süreci yok, sınır anlamsız
+      sinir.set(it.downloadLimit ?? 0)
       btn.oynat.hidden = !(done || it.state === 'downloading')
       btn.oynat.classList.toggle('gri', !done); btn.oynat.classList.toggle('oynat', done)
       btn.duraklat.hidden = !(it.state === 'downloading' || it.state === 'resolving')

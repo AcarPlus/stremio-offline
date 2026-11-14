@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
-  startSeeder, startService, serviceConfig, cleanService, startRqbit, silentPeer, engineStats,
+  startSeeder, startService, serviceConfig, cleanService, startRqbit, silentPeer, engineStats, engineOf, alive,
   readRange, waitFor, sleep, rq, killAll, MiB, TEST_DIR, PORTS
 } from './harness.mjs'
 import { FILM, PACK, sourcePath, readSource } from './fixture.mjs'
@@ -21,6 +21,7 @@ const seedUploaded = async ih => (await rq(seed.base, 'GET', `/torrents/${ih}/st
 describe('A: oynatma, duraklat/sürdür, tamamlanınca duraklatma, silme', () => {
   const sc = serviceConfig(1)
   let svc
+  let peerPort // bu indirmenin motor sürecinin eş kapısı
   before(async () => { cleanService(sc); svc = await startService(sc) })
   after(async () => { await svc?.stop() })
 
@@ -63,22 +64,27 @@ describe('A: oynatma, duraklat/sürdür, tamamlanınca duraklatma, silme', () =>
     console.log(`  canlı: %${live.percent} hız ${(live.downloadSpeed / MiB).toFixed(2)} MiB/s, kalan ${live.eta} sn, peer ${live.peers}`)
     const st = await svc.api('GET', '/api/status')
     assert.ok(st.usedBytes > 0 && st.diskFreeBytes > 0 && st.downloadSpeed > 0)
+    const eng = await engineOf(svc, ih)
+    assert.ok(eng && eng.pid && alive(eng.pid), 'indirmenin kendi motor süreci var')
+    peerPort = eng.peerPort
     const p = await svc.api('POST', `/api/items/${ih}/pause`)
     assert.equal(p.state, 'paused')
     assert.equal(p.downloadSpeed, 0)
-    await sleep(800)
-    const e1 = await engineStats(svc, ih)
-    assert.equal(e1.state, 'paused')
+    // Duraklatılmış indirme için süreç tutulmaz
+    await waitFor(() => !alive(eng.pid), { timeout: 5000, what: 'duraklatınca motor süreci kapandı' })
+    assert.equal(await engineOf(svc, ih), null)
+    const d1 = (await svc.item(ih)).doneBytes
     await sleep(2500)
-    const e2 = await engineStats(svc, ih)
-    assert.equal(e2.progress_bytes, e1.progress_bytes, 'duraklatılmışken ilerleme değişmemeli')
     const i2 = await svc.item(ih)
     assert.equal(i2.state, 'paused')
+    assert.equal(i2.doneBytes, d1, 'duraklatılmışken ilerleme değişmemeli')
     // ikinci duraklatma hatasız (idempotent)
     await svc.api('POST', `/api/items/${ih}/pause`)
     const r = await svc.api('POST', `/api/items/${ih}/resume`)
-    assert.equal(r.state, 'downloading')
-    await waitFor(async () => (await engineStats(svc, ih)).progress_bytes > e2.progress_bytes, { what: 'sürdürünce ilerleme' })
+    assert.equal(r.state, 'resolving')
+    await waitFor(async () => { const i = await svc.item(ih); return i.state === 'downloading' && i.doneBytes > d1 }, { what: 'sürdürünce kaldığı yerden ilerleme' })
+    const i3 = await svc.item(ih)
+    assert.ok(i3.doneBytes >= d1, 'sürdürünce ilerleme kaybolmamalı')
   })
 
   test('tamamlanınca torrent duraklatılır, sonrasında yükleme yok', async () => {
@@ -86,22 +92,19 @@ describe('A: oynatma, duraklat/sürdür, tamamlanınca duraklatma, silme', () =>
     const done = await waitFor(async () => { const i = await svc.item(ih); return i.state === 'completed' && i }, { timeout: 60000, what: 'tamamlandı' })
     assert.equal(done.percent, 100)
     assert.ok(done.completedAt)
-    const e = await engineStats(svc, ih)
-    assert.equal(e.state, 'paused')
-    assert.equal(e.finished, true)
+    // Bitince süreç kapanır (yükleme olamaz); dosyalar diskten oynatılır
+    await waitFor(async () => (await engineOf(svc, ih)) === null, { timeout: 5000, what: 'bitince motor süreci kapandı' })
     const file = path.join(sc.downloadDir, FILM.name)
     assert.ok(readSource(file, 0, 4 * MiB).equals(readSource(sourcePath('film'), 0, 4 * MiB)))
     assert.ok(readSource(file, FILM.size - 4 * MiB, 4 * MiB).equals(readSource(sourcePath('film'), FILM.size - 4 * MiB, 4 * MiB)))
     // Yalnızca bu servisi tanıyan bir eş: 6 sn içinde hiçbir bayt alamamalı
     const leech = await startRqbit({ name: 'leech', api: PORTS.leech, port: PORTS.leech + 1, out: path.join(TEST_DIR, 'leech-out') })
     try {
-      await rq(leech.base, 'POST', `/torrents?overwrite=true&initial_peers=127.0.0.1:${sc.peerPort}`, fx.film.torrent)
+      await rq(leech.base, 'POST', `/torrents?overwrite=true&initial_peers=127.0.0.1:${peerPort},127.0.0.1:${sc.peerPort}`, fx.film.torrent)
       await sleep(6000)
       const ls = await rq(leech.base, 'GET', `/torrents/${ih}/stats/v1`)
-      const e2 = await engineStats(svc, ih)
-      console.log(`  sömürücü eş aldı: ${ls.progress_bytes} bayt; servis yüklemesi: ${e2.uploaded_bytes} bayt`)
+      console.log(`  sömürücü eş aldı: ${ls.progress_bytes} bayt`)
       assert.equal(ls.progress_bytes, 0)
-      assert.equal(e2.uploaded_bytes, e.uploaded_bytes)
     } finally { leech.stop() }
   })
 
@@ -158,7 +161,7 @@ describe('B: dosya seçimiyle ekleme, seçim değişikliği, iptal', () => {
   test('seçim değişikliği: tamamlanmış pakete bölüm eklemek indirmeyi sürdürür', async () => {
     const ih = fx.pack.infoHash
     const r = await svc.api('POST', `/api/items/${ih}/files`, { files: [0, 2, 3] })
-    assert.equal(r.state, 'downloading')
+    assert.ok(['resolving', 'downloading'].includes(r.state), r.state) // bitmiş öğenin süreci yok: yeniden açılır, eklenir
     const item = await waitFor(async () => { const i = await svc.item(ih); return i.state === 'completed' && i }, { timeout: 60000, what: 'E03 de indi' })
     assert.equal(item.files.find(f => f.idx === 3).complete, true)
     assert.equal(item.files.find(f => f.idx === 3).videoId, 'tt0000002:1:3')
@@ -196,9 +199,15 @@ describe('C: servis yeniden başlatma (indirme ortasında), motor çökmesi', ()
     await svc.api('POST', '/api/items', { infoHash: fx.pack.infoHash, files: [3], type: 'series', id: 'tt0000002:1:3' })
     await waitFor(async () => (await svc.item(fx.pack.infoHash)).state === 'downloading', { what: 'paket eklendi' })
     await svc.api('POST', `/api/items/${fx.pack.infoHash}/pause`)
-    await svc.kill() // rqbit yetim kalır
+    const orphans = (await svc.api('GET', '/api/engines')).engines.map(e => e.pid)
+    assert.equal(orphans.length, 1, 'yalnızca inmekte olan filmin süreci var')
+    const filmSlot = (await engineOf(svc, ih)).slot
+    await svc.kill() // rqbit süreçleri yetim kalır
     const up0 = await seedUploaded(ih)
-    svc = await startService(sc) // önceki rqbit'i kapatıp yenisini başlatmalı
+    svc = await startService(sc) // önceki rqbit süreçlerini (pid kaydından) kapatıp yenisini başlatmalı
+    for (const pid of orphans) assert.ok(!alive(pid), 'yetim kalan motor süreci kapatıldı: ' + pid)
+    await waitFor(async () => (await engineOf(svc, ih))?.ready, { what: 'filmin motoru yeniden başladı' })
+    assert.equal((await engineOf(svc, ih)).slot, filmSlot, 'aynı indirme aynı yuvayı (kapıları) kullanır')
     const item = await svc.item(ih)
     assert.ok(item.doneBytes >= before.doneBytes * 0.9, `ilerleme korunmalı (${item.doneBytes} < ${before.doneBytes})`)
     const done = await waitFor(async () => { const i = await svc.item(ih); return i.state === 'completed' && i }, { timeout: 60000, what: 'yeniden açılış sonrası tamamlandı' })
@@ -209,8 +218,7 @@ describe('C: servis yeniden başlatma (indirme ortasında), motor çökmesi', ()
     assert.ok(fetchedThisSession <= FILM.size - before.doneBytes + 4 * MiB, 'baştan indirilmiş')
     const p = await svc.item(fx.pack.infoHash)
     assert.equal(p.state, 'paused')
-    const pe = await engineStats(svc, fx.pack.infoHash)
-    assert.ok(!pe || pe.state === 'paused', 'duraklatılmış paket motorda çalışmamalı')
+    assert.equal(await engineOf(svc, fx.pack.infoHash), null, 'duraklatılmış paket için süreç yok')
     const file = path.join(sc.downloadDir, FILM.name)
     for (const ofs of [0, Math.floor(FILM.size / 2), FILM.size - MiB]) assert.ok(readSource(file, ofs, MiB).equals(readSource(sourcePath('film'), ofs, MiB)))
   })
@@ -220,12 +228,13 @@ describe('C: servis yeniden başlatma (indirme ortasında), motor çökmesi', ()
     await svc.api('POST', `/api/items/${ih}/resume`)
     await waitFor(async () => (await svc.item(ih)).state === 'downloading', { what: 'paket sürdü' })
     // motor kendi başına torrenti "unutursa" (Faz 0: başlatılamayan torrent sessizce düşer)
-    await rq(svc.rqbit, 'POST', `/torrents/${ih}/forget`)
+    await waitFor(async () => (await engineStats(svc, ih)) !== null, { what: 'paket motoru hazır' })
+    const eng = await engineOf(svc, ih)
+    await rq(eng.base, 'POST', `/torrents/${ih}/forget`)
     await waitFor(async () => (await engineStats(svc, ih)) !== null, { what: 'yeniden eklendi' })
-    // rqbit sürecini öldür: gözetmen yeniden başlatmalı
+    // indirmenin rqbit sürecini öldür: gözetmen yeniden başlatmalı, torrent yeniden eklenmeli
     const st0 = await svc.api('GET', '/api/status')
-    const pid = Number(fs.readFileSync(path.join(sc.dataDir, 'rqbit', 'rqbit.pid'), 'utf8'))
-    process.kill(pid)
+    process.kill(eng.pid)
     await waitFor(async () => { const s = await svc.api('GET', '/api/status'); return s.engine.ready && s.engine.restarts > st0.engine.restarts }, { timeout: 20000, what: 'rqbit yeniden başladı' })
     const done = await waitFor(async () => { const i = await svc.item(ih); return i.state === 'completed' && i }, { timeout: 60000, what: 'paket tamamlandı' })
     assert.equal(done.files.find(f => f.idx === 3).complete, true)
@@ -302,6 +311,7 @@ describe('E: eski kütüphanenin taşınması', () => {
     await sleep(3000)
     const torrents = await rq(svc.rqbit, 'GET', '/torrents')
     assert.equal(torrents.torrents.length, 0, 'motora hiçbir şey eklenmemeli')
+    assert.equal((await svc.api('GET', '/api/engines')).engines.length, 0, 'hiçbir indirme süreci açılmamalı')
     assert.equal((await svc.item(fx.film.infoHash)).state, 'paused')
     // Bitmiş eski kayıt diskten oynar (motora gerek yok)
     const r = await readRange(`${svc.base}/play/movie/tt0000003/${'c'.repeat(40)}/x`, 100, 1123)

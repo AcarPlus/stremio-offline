@@ -13,10 +13,11 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 - **Seed:** indirme bitince yükleme yapılmaz.
 - **Mobil:** Android. Hedef, dosyayı telefona alıp dışarıda izlemek (Faz 5: aynı Wi-Fi'da İndirme Merkezi'nden telefona indirme). Telefonun kendi başına indirmesi ayrı bir karar, kapsam dışı.
 - **Paylaşım:** Faz 6'da tek klasör + tek tıkla kurulum paketi.
+- **Hız sınırı (2026-11-14):** indirme başına indirme sınırı + tek yükleme sınırı. rqbit 9.1.0'ın HTTP API'sinde torrent başına sınır yok (yalnızca süreç geneli `GET/POST /torrents/limits`), bu yüzden **her etkin indirme kendi rqbit sürecinde** çalışır (süreç başına ~40 MB RAM). Süreç yalnızca öğe `resolving`/`downloading` iken vardır; duraklatınca, bitince, hata olunca, silinince kapatılır. Sürdürünce torrent aynı klasöre `overwrite=true` ile yeniden eklenir, rqbit diskteki veriyi doğrular (~250 MB/sn) ve kaldığı yerden sürer. Sınır çalışırken `POST /torrents/limits` ile değişir. Ayrıntı: `lib/pool.mjs`, `docs/api.md` "Hız sınırı".
 
 ## Mevcut kod
 
-- `server.mjs`: giriş noktası, adres `127.0.0.1:11480`. Modüller `lib/` altında (Faz 1): `engine` (rqbit alt süreci, sağlık izleme, yeniden başlatma), `manager` (indirme yöneticisi), `library` (kalıcı kütüphane, eski biçimden taşıma), `torrentio`, `addon` (Stremio uçları), `api` (arayüz API'si, belge: `docs/api.md`), `play` (oynatma), `meta`, `episodes`, `bencode`, `inject`.
+- `server.mjs`: giriş noktası, adres `127.0.0.1:11480`. Modüller `lib/` altında (Faz 1): `engine` (rqbit alt süreci, sağlık izleme, yeniden başlatma), `pool` (indirme başına rqbit süreçleri, kapı yuvaları, pid kaydı), `settings` (arayüz ayarları, `data/ayarlar.json`), `gecis` (tek oturumdan süreç başına düzene bir kerelik geçiş), `manager` (indirme yöneticisi), `library` (kalıcı kütüphane, eski biçimden taşıma), `torrentio`, `addon` (Stremio uçları), `api` (arayüz API'si, belge: `docs/api.md`), `play` (oynatma), `meta`, `episodes`, `bencode`, `inject`.
 - `web/`: İndirme Merkezi (Faz 2; `index.html`, `stil.css`, `app.js`). Servis kökünde sunulur; belge: `docs/api.md` "İndirme Merkezi arayüzü".
 - `test/`: yerel döngü sınamaları (`npm test`).
 - `inject.js`: akış sağ tık menüsüne ve kart üç nokta menüsüne "Cihaza indir" ekler. Stremio'nun hata ayıklama kapısı (11481) üzerinden yüklenir.
@@ -26,6 +27,7 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 - Faz 4 arayüz: Stremio'nun yan gezinme çubuğunda (`nav-tab-button-container` kökü, Library'den sonra) kalıcı "İndirilenler" girişi → gömülü İndirme Merkezi `#/indirilenler`. Çubuğu olmayan sayfalarda (film/dizi) sol üstte küçük düğme; çubuğu olması gereken sayfada bulunamazsa 8 sn sonra düğme + yapı uyarısı. Oynatıcıda yok. Film sayfasındaki "İndir" düğmesi içerik iniyorsa "İniyor %x", inmişse "İndirildi" yazar ve tıklayınca İndirilenler'i açar. Kart menüsü kapanışı (D1): `pointerdown` + Esc + tetikleyiciye `pointerdown`.
 - `tools/cdp-eval.mjs`, `tools/cdp-run.mjs`: Stremio sayfasında JS çalıştıran yardımcılar.
 - `docs/faz0-rapor.md`: motor ölçümü ve rqbit API başvurusu (Faz 0 çıktısı).
+- Hız sınırı düzeni: kontrol süreci (11482/4240; yalnızca eklemeden dosya listesi) + indirme süreçleri (yuva k: API 11490+k, eş 4241+k; yuva öğede saklanır, yeniden başlatmada aynı kalır; kapı doluysa başka yuva). Servis çökerse `data/rqbit/rqbit.pid` ve `data/rqbit/motorlar/<k>/rqbit.pid` bir sonraki açılışta okunur; yalnızca çalıştırılabilir yolu bizim rqbit ve komut satırı bizim API kapımız olan süreçler kapatılır (ada göre toplu kapatma yok). Eski tek oturum (`data/rqbit/oturum`) ilk açılışta `oturum.v1-yedek` olarak kenara alınır (silinmez); kütüphanede eksik .torrent/klasör/seçim varsa oradan tamamlanır. Bilinen bedeller: duraklat→sürdür ve servis açılışı yeniden doğrulama yapar (büyük dosyada saniyeler–dakikalar; `--fastresume` ölçüldü, öldürülen süreçte ilerlemeyi sıfırladığı için kullanılmadı); yükleme sınırı süreç başınadır.
 
 ## Yol haritası
 

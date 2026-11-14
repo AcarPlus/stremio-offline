@@ -12,6 +12,8 @@ const MiB = 1024 * 1024
 const PIECE = 256 * 1024
 
 export const FILM = { name: 'Test.Film.2023.1080p.mkv', size: 48 * MiB, seed: 'film' }
+// Üçüncü tek dosyalık torrent (geçiş sınaması: duraklatılmış yarım indirme)
+export const KLIP = { name: 'Test.Klip.2021.720p.mp4', size: 16 * MiB, seed: 'klip' }
 export const PACK = {
   name: 'Test.Show.S01.1080p',
   files: [
@@ -43,6 +45,7 @@ function writeFile (file, size, seed) {
 }
 
 export function sourcePath (which, i = 0) {
+  if (which === 'klip') return path.join(SOURCE, KLIP.name)
   return which === 'film' ? path.join(SOURCE, FILM.name) : path.join(SOURCE, PACK.name, ...PACK.files[i].components)
 }
 
@@ -54,9 +57,10 @@ export function readSource (file, offset, length) {
   return b
 }
 
-/** Yükleri ve .torrent dosyalarını üretir; { film, pack } -> { torrent (Buffer), infoHash, files } */
+/** Yükleri ve .torrent dosyalarını üretir; { film, pack, klip } -> { torrent (Buffer), infoHash, files } */
 export function makeFixtures () {
   writeFile(sourcePath('film'), FILM.size, FILM.seed)
+  writeFile(sourcePath('klip'), KLIP.size, KLIP.seed)
   PACK.files.forEach((f, i) => writeFile(sourcePath('pack', i), f.size, f.seed))
   const film = createTorrent({
     name: FILM.name, pieceLength: PIECE,
@@ -68,11 +72,16 @@ export function makeFixtures () {
     files: PACK.files.map(f => ({ components: f.components, length: f.size })),
     readAt: (i, o, n) => bytesAt(PACK.files[i].seed, o, n)
   })
+  const klip = createTorrent({
+    name: KLIP.name, pieceLength: PIECE,
+    files: [{ components: [KLIP.name], length: KLIP.size }],
+    readAt: (_, o, n) => bytesAt(KLIP.seed, o, n)
+  })
   const tdir = path.join(TEST_DIR, 'torrent')
   fs.mkdirSync(tdir, { recursive: true })
   fs.writeFileSync(path.join(tdir, 'film.torrent'), film)
   fs.writeFileSync(path.join(tdir, 'pack.torrent'), pack)
-  return { film: { torrent: film, ...parseTorrent(film) }, pack: { torrent: pack, ...parseTorrent(pack) } }
+  return { film: { torrent: film, ...parseTorrent(film) }, pack: { torrent: pack, ...parseTorrent(pack) }, klip: { torrent: klip, ...parseTorrent(klip) } }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1'))) {

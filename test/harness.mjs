@@ -58,9 +58,9 @@ export async function startRqbit ({ name, api, port, out }) {
 
 /**
  * Kapılar her çalıştırmada boş bir bloktan alınır (iki `npm test` aynı anda çakışmaz).
- * Blok: 320 ardışık kapı, hepsi 127.0.0.1'de bağlanabilir olmalı. OFFLINE_TEST_PORT_BASE ile sabitlenebilir.
+ * Blok: 600 ardışık kapı, hepsi 127.0.0.1'de bağlanabilir olmalı. OFFLINE_TEST_PORT_BASE ile sabitlenebilir.
  */
-const BLOCK = 320
+const BLOCK = 600
 async function canBind (port) {
   return new Promise(resolve => {
     const s = net.createServer()
@@ -83,16 +83,19 @@ export const PORTS = { seedApi: PORT_BASE, seedPeer: PORT_BASE + 1, silentPeer: 
 export const SEED = { api: PORTS.seedApi, port: PORTS.seedPeer }
 export const SEED_PEER = `127.0.0.1:${SEED.port}`
 
-/** Tohumlayıcı: fixture'ları üretir, iki torrenti de tam olarak sunar. */
+/** Tohumlayıcı: fixture'ları üretir, üç torrenti de tam olarak sunar. */
 export async function startSeeder () {
   const fx = makeFixtures()
   const s = await startRqbit({ name: 'seed', ...SEED, out: path.join(TEST_DIR, 'seed-out') })
   await rq(s.base, 'POST', `/torrents?overwrite=true&output_folder=${encodeURIComponent(SOURCE)}`, fx.film.torrent)
   await rq(s.base, 'POST', `/torrents?overwrite=true&output_folder=${encodeURIComponent(path.join(SOURCE, PACK.name))}`, fx.pack.torrent)
+  await rq(s.base, 'POST', `/torrents?overwrite=true&output_folder=${encodeURIComponent(SOURCE)}`, fx.klip.torrent)
   await waitFor(async () => {
-    const a = await rq(s.base, 'GET', `/torrents/${fx.film.infoHash}/stats/v1`)
-    const b = await rq(s.base, 'GET', `/torrents/${fx.pack.infoHash}/stats/v1`)
-    return a.finished && b.finished && a.state === 'live' && b.state === 'live'
+    for (const t of [fx.film, fx.pack, fx.klip]) {
+      const st = await rq(s.base, 'GET', `/torrents/${t.infoHash}/stats/v1`)
+      if (!st.finished || st.state !== 'live') return false
+    }
+    return true
   }, { what: 'tohumlayıcı hazır' })
   return { ...s, fx }
 }
@@ -124,6 +127,10 @@ export function serviceConfig (n, extra = {}) {
       OFFLINE_PORT: String(PORT_BASE + 10 + n),
       OFFLINE_RQBIT_PORT: String(PORT_BASE + 110 + n),
       OFFLINE_PEER_PORT: String(PORT_BASE + 210 + n),
+      // İndirme başına motor süreçleri: servis başına 8 yuva (n % 16 ile; aynı anda çalışan servisler çakışmaz)
+      OFFLINE_ENGINE_API_BASE: String(PORT_BASE + 320 + (n % 16) * 8),
+      OFFLINE_ENGINE_PEER_BASE: String(PORT_BASE + 460 + (n % 16) * 8),
+      OFFLINE_ENGINE_SLOTS: '8',
       OFFLINE_LOOPBACK: '1',
       OFFLINE_NO_INJECT: '1',
       OFFLINE_STDIN_CONTROL: '1',
@@ -138,17 +145,18 @@ export function serviceConfig (n, extra = {}) {
 
 export function cleanService (sc) { fs.rmSync(path.join(TEST_DIR, 'svc' + sc.n), { recursive: true, force: true }) }
 
-export async function startService (sc) {
+export async function startService (sc, { root = ROOT } = {}) {
   fs.mkdirSync(sc.dataDir, { recursive: true })
   const out = fs.openSync(path.join(sc.dataDir, '..', 'stdout.log'), 'a')
-  const p = track(spawn(process.execPath, [path.join(ROOT, 'server.mjs')], {
-    cwd: ROOT, env: { ...process.env, ...sc.env }, stdio: ['pipe', out, out], windowsHide: true
+  const p = track(spawn(process.execPath, [path.join(root, 'server.mjs')], {
+    cwd: root, env: { ...process.env, OFFLINE_RQBIT_EXE: RQBIT, ...sc.env }, stdio: ['pipe', out, out], windowsHide: true
   }))
   fs.closeSync(out)
   const base = `http://127.0.0.1:${sc.port}`
   const svc = {
     base,
     proc: p,
+    dataDir: sc.dataDir,
     rqbit: `http://127.0.0.1:${sc.rqbitPort}`,
     async api (method, p2, body) {
       const r = await fetch(base + p2, { method, body: body === undefined ? undefined : JSON.stringify(body) })
@@ -161,11 +169,14 @@ export async function startService (sc) {
     /** Temiz kapanış (stdin "kapat"): servis rqbit'i de kapatır. */
     async stop () {
       if (p.exitCode !== null) return
+      let pids = []
+      try { pids = (await this.api('GET', '/api/engines')).engines.map(e => e.pid).filter(Boolean) } catch {}
       try { p.stdin.write('kapat\n') } catch {}
       await waitFor(() => p.exitCode !== null, { timeout: 10000, what: 'servis kapandı' }).catch(() => p.kill())
       await waitFor(async () => { try { await fetch(svc.rqbit + '/', { signal: AbortSignal.timeout(500) }); return false } catch { return true } }, { timeout: 10000, what: 'rqbit kapandı' })
+      await waitFor(() => !pids.some(alive), { timeout: 10000, what: 'motor süreçleri kapandı' })
     },
-    /** Sert kapanış: yalnızca Node süreci öldürülür (rqbit yetim kalır, sonraki açılış kapatmalı). */
+    /** Sert kapanış: yalnızca Node süreci öldürülür (rqbit süreçleri yetim kalır, sonraki açılış kapatmalı). */
     async kill () {
       p.kill()
       await waitFor(() => p.exitCode !== null || p.signalCode !== null, { timeout: 5000, what: 'servis öldü' })
@@ -175,10 +186,32 @@ export async function startService (sc) {
   return svc
 }
 
-/** Servisin rqbit'inde bu torrentin istatistiği (yoksa null). */
-export async function engineStats (svc, ih) {
-  try { return await rq(svc.rqbit, 'GET', `/torrents/${ih}/stats/v1`) } catch (e) { if (e.status === 404) return null; throw e }
+/** Öğenin motor süreci (GET /api/engines; yoksa null): { infoHash, slot, apiPort, peerPort, pid, ready, base } */
+export async function engineOf (svc, ih) {
+  const r = await svc.api('GET', '/api/engines')
+  const e = r.engines.find(x => x.infoHash === ih)
+  return e ? { ...e, base: `http://127.0.0.1:${e.apiPort}` } : null
 }
+
+/** Öğenin motorunda bu torrentin istatistiği (süreç yoksa ya da torrent yoksa null). */
+export async function engineStats (svc, ih) {
+  const e = await engineOf(svc, ih)
+  if (!e || !e.ready) return null
+  try { return await rq(e.base, 'GET', `/torrents/${ih}/stats/v1`) } catch (e2) { if (e2.status === 404 || e2.cause) return null; throw e2 }
+}
+
+/** Belirli bir süre içinde motorun bu torrent için aldığı bayt/sn (progress_bytes farkı). */
+export async function measureRate (svc, ih, ms = 3000) {
+  const a = await engineStats(svc, ih)
+  const t0 = Date.now()
+  await sleep(ms)
+  const b = await engineStats(svc, ih)
+  if (!a || !b) return null
+  return (b.progress_bytes - a.progress_bytes) / ((Date.now() - t0) / 1000)
+}
+
+/** Süreç canlı mı (pid)? */
+export const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
 
 export async function readRange (url, start, end) {
   const r = await fetch(url, { headers: { Range: `bytes=${start}-${end}` } })

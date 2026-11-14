@@ -1,6 +1,6 @@
 # Offline İndir — HTTP API (Faz 1)
 
-Servis `http://127.0.0.1:11480` adresinde çalışır (yalnızca bu bilgisayardan erişilir). İndirme motoru rqbit, servisin alt sürecidir (API'si `127.0.0.1:11482`, dışarıya kapalı). Bu belge Faz 2 arayüzünün (İndirme Merkezi) kullanacağı uçları anlatır.
+Servis `http://127.0.0.1:11480` adresinde çalışır (yalnızca bu bilgisayardan erişilir). İndirme motoru rqbit, servisin alt sürecidir: bir "kontrol" süreci (API `127.0.0.1:11482`; yalnızca eklemeden dosya listesi için) ve **her etkin indirme için ayrı bir süreç** (API `127.0.0.1:11490+k`, eş kapısı `4241+k`; hepsi dışarıya kapalı). Bu belge Faz 2 arayüzünün (İndirme Merkezi) kullanacağı uçları anlatır.
 
 Genel kurallar:
 - Gövdeler JSON'dur (`Content-Type` zorunlu değil). Yanıtlar JSON; hata gövdesi `{ "err": "Türkçe açıklama" }`.
@@ -33,6 +33,7 @@ Genel kurallar:
   "eta": 11,                              // sn; bilinmiyorsa null
   "peers": 37,                            // bağlı kaynak (eş) sayısı
   "engineState": "live",                  // motor durumu (initializing | live), yalnızca inerken
+  "downloadLimit": 2000000,               // bu indirmenin hız sınırı, bayt/sn; 0 = sınırsız (kalıcı)
   "source": { "title": "...", "quality": "720p", "sizeGB": 0.14, "seeders": 23, "site": "YTS", "languages": ["gb"] },
   "poster": "http://127.0.0.1:11480/img/tt1727587-poster",   // yerelde yoksa ""
   "playUrl": "http://127.0.0.1:11480/play/movie/tt1727587/<infoHash>/5",
@@ -50,7 +51,7 @@ Durumlar (`state`):
 |---|---|---|
 | `resolving` | Torrent bilgisi (metadata) bekleniyor. `metadataTimeoutSec` (vars. 90 sn) içinde gelmezse `error` olur. | pause, cancel, delete |
 | `downloading` | İniyor. | pause, cancel, delete, files |
-| `paused` | Durduruldu; motor bu torrent için hiçbir şey indirmez/yüklemez. Eski (webtorrent dönemi) kayıtlar bu durumla taşınır. | resume, cancel, delete, files |
+| `paused` | Durduruldu; bu indirmenin motor süreci kapatılır, hiçbir şey indirilmez/yüklenmez. Eski (webtorrent dönemi) kayıtlar bu durumla taşınır. | resume, cancel, delete, files |
 | `completed` | Seçili dosyaların hepsi indi. Torrent motorda **duraklatılır** (yükleme yok); dosyalar diskten oynatılır. | delete, files (yeni dosya seçmek indirmeyi sürdürür) |
 | `error` | Metadata gelmedi ya da motor hata verdi. `error` alanında açıklama. | resume (yeniden dener), cancel, delete |
 
@@ -58,12 +59,13 @@ Notlar:
 - `downloadSpeed/peers/eta` yalnızca `downloading` iken dolu; diğer durumlarda 0/null.
 - `files[].path` diskteki yerdir. Seçili dosyalar diskte baştan tam boyutta (seyrek) görünür; ilerleme için **`doneBytes`/`progress` kullanılır, dosya boyutu değil**.
 - `videoId`: dosyanın Stremio kimliği (film: `tt…`, bölüm: `tt…:sezon:bölüm`). Paketlerde dosya adlarından (S01E02, 1x02, "Season 1/Episode 02" …) çıkarılır.
-- Servis yeniden başlatıldığında `downloading` öğeler kaldıkları yerden sürer (baştan inmez); `paused`, `completed`, `error` öğeler motorda duraklatılmış kalır. Hiçbir öğe kendiliğinden `paused`dan çıkmaz.
+- Servis yeniden başlatıldığında `downloading` öğeler kaldıkları yerden sürer (baştan inmez); `paused`, `completed`, `error` öğeler için motor süreci açılmaz (süreç yalnızca `resolving`/`downloading` iken vardır; sürdürülünce açılır, veriyi doğrular ve kaldığı yerden sürer). Hiçbir öğe kendiliğinden `paused`dan çıkmaz.
 
 ## Uçlar
 
 ### Durum
-- `GET /api/status` → `{ downloadDir, usedBytes, diskFreeBytes, diskTotalBytes, downloadSpeed, active, engine: { ready, restarts, error } }`
+- `GET /api/status` → `{ downloadDir, usedBytes, diskFreeBytes, diskTotalBytes, downloadSpeed, active, engine: { ready, restarts, error, processes }, settings: { defaultDownloadLimit, uploadLimit } }`
+  - `engine.ready`: kontrol süreci hazır. `processes`: çalışan indirme süreci sayısı. `restarts`: bütün süreçlerin çökme sonrası yeniden başlama toplamı.
   - `usedBytes`: kütüphanedeki inmiş verinin toplamı. `diskFreeBytes`: indirme klasörünün bulunduğu diskte boş alan.
 - `GET /api/items` → `{ summary: <status ile aynı>, items: [öğe, …] }` (en yeni önce). Arayüz bunu ~1 sn'de bir sorgulayabilir.
 - `GET /api/items/:id` → öğe.
@@ -87,6 +89,17 @@ Notlar:
 - `POST /api/items/:id/cancel` → `{ ok: true }`. İndirmeyi durdurur, **inmiş kısmı siler**, öğeyi kaldırır. `completed` için `409` (onun yerine silin).
 - `DELETE /api/items/:id` (ya da `POST /api/items/:id/delete`) → `{ ok: true }`. Öğeyi ve dosyalarını siler. `?keepFiles=1` ile dosyalar diskte kalır, yalnızca kayıt kalkar. Yalnızca indirme klasörü (ya da öğenin kendi klasörü) içindeki dosyalar silinir.
 - `POST /api/items/:id/files` gövde `{ "files": [0, 2, 3] }` → öğe. Seçimi değiştirir (paketten bölüm ekle/çıkar). Tamamlanmış öğeye yeni dosya eklemek indirmeyi sürdürür.
+
+### Hız sınırı
+Birim **bayt/sn**, `0` = sınırsız, en çok 4294967295. Geçersiz değer `400`.
+- `POST /api/items/:id/limit` gövde `{ "downloadLimit": 2000000 }` → öğe. Bu indirmenin indirme sınırı. Çalışan sürece **hemen** uygulanır (süreç yeniden başlamaz); öğede saklanır, yeniden başlatmada korunur. Duraklatılmış/hatalı öğede kaydedilir, sürdürülünce geçerli olur.
+- `GET /api/settings` → `{ defaultDownloadLimit, uploadLimit }`.
+- `POST /api/settings` gövde (alanların hepsi isteğe bağlı) `{ "defaultDownloadLimit": 0, "uploadLimit": 100000, "applyToAll": true }` → ayarlar.
+  - `defaultDownloadLimit`: yeni eklenen indirmelerin aldığı sınır. Var olanlar değişmez.
+  - `applyToAll: true`: varsayılanı **bütün** öğelere yazar (çalışanlara hemen uygulanır).
+  - `uploadLimit`: yükleme sınırı; her süreç için ayrı uygulanır (N etkin indirme ≈ N × sınır). Bitmiş indirme zaten yükleme yapmaz (süreci kapatılır).
+  - Kalıcı: `data/ayarlar.json`. İlk değerler `config.json` (`downloadLimit`, `uploadLimit`) ya da `OFFLINE_RATELIMIT_DOWN`/`OFFLINE_RATELIMIT_UP`'tan gelir; arayüzden değiştirilen değer sonra geçerlidir.
+- `GET /api/engines` (tanı) → `{ control: { apiPort, pid, ready }, engines: [{ infoHash, slot, apiPort, peerPort, pid, ready, restarts, limits }] }`.
 
 ### Torrentio katmanı
 - `GET /api/versions?type=movie&id=tt1727587` ya da `?type=series&id=tt0903747:1:2` → `{ type, id, versions: [sürüm, …] }` (seeder'a göre azalan). Sürüm:
@@ -151,7 +164,7 @@ Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`in
 
 | Adres | Ekran |
 |---|---|
-| `/#/` | İndirmeler / İndirilenler (özet şeridi, kartlar, duraklat/sürdür/iptal/sil/oynat) |
+| `/#/` | İndirmeler / İndirilenler (özet şeridi, hız sınırı ayarları, kartlar, duraklat/sürdür/iptal/sil/oynat, kart başına hız sınırı) |
 | `/#/indirilenler` | Aynı liste, başlığı "İndirilenler"; Stremio'nun gezinme çubuğundaki giriş ve film sayfasındaki "İndirildi/İniyor" düğmesi bunu açar |
 | `/#/ara`, `/#/ara/<söz>` | Başlık arama |
 | `/#/dizi/<tt…>` | Dizinin sezon listesi |
@@ -189,13 +202,15 @@ Gömülü olmayan kipte "oynat" aynı `playUrl`'i yeni sekmede açar. Ana pencer
 | `downloadDir` | kullanıcının Videos\Stremio-Offline klasörü | |
 | `torrentioUrl` | `https://torrentio.strem.fun` | ayarlı Torrentio adresi verilebilir |
 | `showDownloadRows`, `autoQuality`, `autoMaxSizeGB`, `debugPort` | | önceki sürümle aynı |
-| `rqbitApiPort` | 11482 | motor API'si, yalnızca 127.0.0.1 |
-| `rqbitPeerPort` | 4240 | eş kapısı |
+| `rqbitApiPort` | 11482 | kontrol motorunun API'si, yalnızca 127.0.0.1 |
+| `rqbitPeerPort` | 4240 | kontrol motorunun eş kapısı |
+| `engineApiPortBase`, `enginePeerPortBase`, `engineSlots` | 11490, 4241, 100 | indirme süreçlerinin kapıları: yuva k için API `11490+k`, eş `4241+k` |
 | `peerListenIp` | `127.0.0.1` | eşleri dinleme adresi. 127.0.0.1: yalnızca giden bağlantı (gerçek ağda denendi, Sintel ~5 MiB/s); güvenlik duvarı sorusu çıkmaz. `null`: rqbit varsayılanı (tüm arayüzler) |
 | `metadataTimeoutSec` | 90 | |
-| `downloadLimit` | 0 | bayt/sn, 0 sınırsız; servis yeniden başlatılınca geçerli |
+| `downloadLimit` | 0 | yeni indirmeler için varsayılan sınırın **ilk değeri**, bayt/sn, 0 sınırsız (sonrası `data/ayarlar.json`) |
+| `uploadLimit` | 100000 | yükleme sınırının ilk değeri, bayt/sn, süreç başına |
 
-UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`--disable-dht-persistence`). Motorun oturum durumu `data/rqbit/oturum`, günlüğü `data/rqbit/rqbit.log`; .torrent önbelleği `data/torrents/`; servis günlüğü `data/servis.log`.
+UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`--disable-dht-persistence`; aynı anda birden çok süreç böylece çakışmaz). Motor oturum kalıcılığı kapalıdır (`--disable-persistence`): doğruluk kaynağı `library.json` + `.torrent` önbelleği (`data/torrents/`); süreç her başladığında torrent aynı klasöre yeniden eklenip doğrulanır. Günlükler: kontrol `data/rqbit/rqbit.log`, indirme süreçleri `data/rqbit/motorlar/<yuva>/rqbit.log` (pid dosyası da orada); servis günlüğü `data/servis.log`. Eski tek oturum (`data/rqbit/oturum`) ilk açılışta `data/rqbit/oturum.v1-yedek` olarak kenara alınır.
 
 ## Ortam değişkenleri (sınama)
 
@@ -205,7 +220,9 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 | `OFFLINE_DOWNLOAD_DIR` | İndirme klasörü |
 | `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT` | Kapılar |
 | `OFFLINE_PEER_LISTEN_IP` | `peerListenIp` (boş = rqbit varsayılanı) |
-| `OFFLINE_TORRENTIO_URL`, `OFFLINE_METADATA_TIMEOUT`, `OFFLINE_RATELIMIT_DOWN` | Ayar karşılıkları |
+| `OFFLINE_TORRENTIO_URL`, `OFFLINE_METADATA_TIMEOUT`, `OFFLINE_RATELIMIT_DOWN`, `OFFLINE_RATELIMIT_UP` | Ayar karşılıkları (`downloadLimit`, `uploadLimit`: ilk değer) |
+| `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE`, `OFFLINE_ENGINE_SLOTS` | İndirme süreçlerinin kapı aralığı |
+| `OFFLINE_RQBIT_EXE` | rqbit yolu (sınama) |
 | `OFFLINE_LOOPBACK=1` | DHT/tracker/LSD kapalı (internetsiz sınama) |
 | `OFFLINE_EXTRA_PEERS=ip:port,…` | Her eklemede/sürdürmede motora verilen eşler (sınama tohumlayıcısı) |
 | `OFFLINE_NO_INJECT=1` | Stremio arayüzüne düğme ekleme kapalı |

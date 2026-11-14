@@ -213,3 +213,13 @@ html.gomulu .bildirimler { top: 52px; }
 }
 @media (prefers-reduced-motion: reduce) { .cubuk i { transition: none; } .bekle .cubuk i, .donen { animation: none; } }
 .bekle .cubuk i { width: 100% !important; opacity: .55; }
+
+/* Hız sınırı: üst şeritteki ayarlar ve kart satırı */
+.sinirlar { gap: 8px 14px; }
+.sinirEtiket { display: inline-flex; align-items: center; gap: 8px; color: var(--soluk); font-size: 13.5px; flex-wrap: wrap; }
+.sinirSecici { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sinirSecici select { min-height: 32px; padding: 4px 8px; color: var(--metin); }
+.sinirSayi { width: 84px; background: var(--bg); border: 1px solid var(--cizgi); border-radius: 8px; padding: 5px 8px; min-height: 32px; }
+.sinirSayi:focus { border-color: var(--vurgu); outline: none; }
+.sinirSatiri { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; }
+.sinirSatiri .sinirSecici select { min-height: 30px; padding: 3px 6px; font-size: 13px; }
