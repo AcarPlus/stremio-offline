@@ -248,6 +248,13 @@
     return [...root.querySelectorAll(`[class*="${base}"]`)].filter(el => saf.classHas(el.getAttribute('class'), base))
   }
 
+  // Stremio önceki sayfaları gizli (display:none) tutar; yalnızca görünen sayfadaki öğe kullanılır.
+  const visible = el => el.getClientRects().length > 0
+  function visibleByClass (base) {
+    const list = byClass(base).filter(visible)
+    return list[list.length - 1] || null
+  }
+
   function closeMenus () {
     for (const type of ['mousedown', 'mouseup', 'click']) document.body.dispatchEvent(new MouseEvent(type, { bubbles: true }))
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }))
@@ -442,7 +449,7 @@
 
   function currentSeason (route) {
     if (Number.isInteger(route.season)) return route.season
-    for (const bar of byClass('seasons-bar')) {
+    for (const bar of byClass('seasons-bar').filter(visible)) {
       const s = saf.seasonFromText(bar.textContent)
       if (s !== null) return s
       for (const el of bar.querySelectorAll('*')) {
@@ -470,10 +477,10 @@
   function decorateDetail (route) {
     const key = route.type + '/' + route.id
     if (key !== detailKey) { detailKey = key; detailSince = Date.now(); dropFloat() }
-    // Başka bir içerik için kalmış düğmeleri kaldır.
-    for (const el of document.querySelectorAll('[data-oi-for]')) if (el.getAttribute('data-oi-for') !== key) el.remove()
+    // Başka bir içerik için kalmış ya da gizli (önceki) sayfada kalmış düğmeleri kaldır.
+    for (const el of document.querySelectorAll('[data-oi-for]')) if (el.getAttribute('data-oi-for') !== key || !visible(el)) el.remove()
 
-    const actions = byClass('action-buttons-container')[0]
+    const actions = visibleByClass('action-buttons-container')
     const late = Date.now() - detailSince > 8000
     const useFloat = !actions && late
     if (!actions && !late) return
@@ -505,7 +512,7 @@
     const existing = document.querySelector(`[${MARK}="oynat"]`)
     if (!playable) { if (existing) (existing.closest('.oi-actions') || existing).remove(); return }
     if (existing) return
-    const info = byClass('meta-info-container')[0]
+    const info = visibleByClass('meta-info-container')
     if (!info && !late) return
     const pb = makeBtn('oynat', '▶ Offline oynat', 'oi-play', () => {
       const cur = index.get(route.id)
