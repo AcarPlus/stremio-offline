@@ -110,3 +110,32 @@ test('inject: yalnızca servisten gelen ve geçerli iletiler kabul edilir', () =
   assert.ok(!saf.isHostMessage({ source: 'offline-indir', type: 'sil' }, API, API))
   assert.ok(!saf.isHostMessage('kapat', API, API))
 })
+
+test('inject: İndirilenler adresi ve film sayfası düğme durumu (D2)', () => {
+  assert.equal(saf.embedUrl(API, { name: 'indirilenler' }), API + '/?embed=1#/indirilenler')
+  const none = saf.downloadButton(undefined, 'movie')
+  assert.equal(none.state, 'none')
+  assert.equal(none.text, '⬇ İndir')
+  const act = saf.downloadButton({ type: 'movie', done: 0, active: 1, doneBytes: 25, sizeBytes: 100 }, 'movie')
+  assert.equal(act.state, 'active')
+  assert.equal(act.text, '⬇ İniyor %25')
+  const done = saf.downloadButton({ type: 'movie', done: 1, active: 0 }, 'movie')
+  assert.equal(done.state, 'done')
+  assert.equal(done.text, '✓ İndirildi')
+  // dizi sayfasında metin ve durum değişmez
+  assert.equal(saf.downloadButton({ type: 'series', done: 3, active: 0 }, 'series').text, '⬇ Sezonu indir')
+  assert.equal(saf.downloadButton({ type: 'series', done: 3, active: 0 }, 'series').state, 'none')
+})
+
+test('inject: servis betiği sürüm damgası alır (yeniden başlayan servis eski kopyayı değiştirir)', async () => {
+  const { buildSource } = await import('../lib/inject.mjs')
+  const a = buildSource('const API = "__API__"; const S = "__SURUM__"', 'http://127.0.0.1:1')
+  const b = buildSource('const API = "__API__"; const S = "__SURUM__" // değişti', 'http://127.0.0.1:1')
+  assert.match(a, /http:\/\/127\.0\.0\.1:1/)
+  assert.ok(!a.includes('__SURUM__') && !a.includes('__API__'))
+  assert.notEqual(a.match(/S = "(\w+)"/)[1], b.match(/S = "(\w+)"/)[1], 'içerik değişince sürüm değişir')
+  assert.equal(a, buildSource('const API = "__API__"; const S = "__SURUM__"', 'http://127.0.0.1:1'), 'aynı içerik aynı sürüm')
+  const real = buildSource(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'inject.js'), 'utf8'), API)
+  assert.match(real, /const SURUM = '[0-9a-f]{10}'/)
+  new vm.Script(real) // sözdizimi geçerli
+})

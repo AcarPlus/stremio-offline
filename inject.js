@@ -3,14 +3,19 @@
 //  - akış sağ tık menüsüne ve kartların üç nokta menüsüne "Cihaza indir",
 //  - film sayfasında "İndir", dizi sayfasında "Sezonu indir" (İndirme Merkezi gömülü pencerede),
 //  - inmiş/inmekte olan içeriklerin posterinde rozet,
-//  - inmiş filmin sayfasının en üstünde "Offline oynat",
+//  - inmiş filmin sayfasının en üstünde "Offline oynat"; film sayfasındaki "İndir" düğmesi içerik
+//    inerken/inmişken durumu gösterir ("İniyor %x" / "İndirildi"),
+//  - Stremio'nun yan gezinme çubuğunda (Board/Discover/Library) kalıcı "İndirilenler" girişi,
 //  - İndirme Merkezi'nden gelen "oynat" iletisiyle yerel dosyayı Stremio oynatıcısında açma.
 // Stremio'nun sınıf adlarındaki rastgele eklere (ör. "action-buttons-container-XbKVa") bağlı
 // kalınmaz: sınıfın anlamlı kökü aranır (classHas). Beklenen bir yer bulunamazsa düğmeler yedek
 // konuma konur ve konsolda + ekranın sol altında küçük bir uyarı gösterilir.
 // Saf kısım (saf) Node'da da çalışır: test/inject.test.mjs.
+// Servis her yüklemede __SURUM__ damgasını koyar; sayfada farklı sürümden eski bir kopya varsa
+// önce o sökülür (servis yeniden başlayınca sayfa yenilemeye gerek kalmaz).
 (() => {
   const API = '__API__'
+  const SURUM = '__SURUM__'
 
   // ---------------------------------------------------------------- saf yardımcılar
   const saf = (() => {
@@ -59,6 +64,7 @@
     /** İndirme Merkezi'nin gömülü kip adresi. */
     function embedUrl (api, route) {
       const base = api + '/?embed=1#/'
+      if (route && route.name === 'indirilenler') return base + 'indirilenler'
       if (!route || !route.id) return base
       if (route.type === 'movie') return base + 'surum/movie/' + route.id
       if (Number.isInteger(route.season)) return base + 'sezon/' + route.id + '/' + route.season
@@ -117,6 +123,15 @@
       return null
     }
 
+    /** Film sayfasındaki "İndir" düğmesinin durumu: { state: 'none' | 'active' | 'done', text, title }. */
+    function downloadButton (e, type) {
+      if (type !== 'movie') return { state: 'none', text: '⬇ Sezonu indir', title: 'Sezonu ya da bölümleri cihaza indir (Offline İndir)' }
+      const b = badgeInfo(e)
+      if (b && b.kind === 'done') return { state: 'done', text: '✓ İndirildi', title: 'Cihaza indirildi; İndirilenler’i aç (Offline İndir)' }
+      if (b && b.kind === 'active') return { state: 'active', text: b.text, title: 'Cihaza iniyor; İndirilenler’i aç (Offline İndir)' }
+      return { state: 'none', text: '⬇ İndir', title: 'Sürüm seç ve cihaza indir (Offline İndir)' }
+    }
+
     /** Oynatıcıya verilecek Stremio akış nesnesi. */
     function streamFor (d) {
       const fileName = d.fileName || null
@@ -160,13 +175,36 @@
         (data.type === 'kapat' || (data.type === 'oynat' && !!data.item && typeof data.item.playUrl === 'string' && data.item.playUrl.startsWith(apiOrigin + '/play/')))
     }
 
-    return { classHas, parseRoute, seasonFromText, embedUrl, offlineIndex, badgeInfo, streamFor, encodeStream, decodeStream, playerHash, isHostMessage }
+    return { classHas, parseRoute, seasonFromText, embedUrl, offlineIndex, badgeInfo, streamFor, encodeStream, decodeStream, playerHash, isHostMessage, downloadButton }
   })()
 
   if (typeof window === 'undefined' || typeof document === 'undefined') { globalThis.__offlineIndirSaf = saf; return }
   if (location.origin !== 'https://web.stremio.com') return
-  if (window.__offlineIndir) return
-  window.__offlineIndir = true
+  // Eski (sürüm damgasız) kopya sökülemez; sayfa yenilenene dek o çalışır.
+  if (window.__offlineIndir === true) return
+  if (window.__offlineIndir) {
+    if (window.__offlineIndir.surum === SURUM) return
+    try { window.__offlineIndir.stop() } catch (e) { console.warn('[Offline İndir] eski kopya sökülemedi:', e) }
+  }
+  let stopped = false
+  const disposers = []
+  /** Dinleyici ekler ve söküm listesine yazar. */
+  function on (target, type, fn, opts) {
+    target.addEventListener(type, fn, opts)
+    disposers.push(() => target.removeEventListener(type, fn, opts))
+  }
+  window.__offlineIndir = {
+    surum: SURUM,
+    stop () {
+      stopped = true
+      for (const d of disposers.splice(0).reverse()) { try { d() } catch {} }
+      clearTimeout(pollTimer)
+      if (overlay) { clearTimeout(overlay.timer); overlay = null }
+      for (const el of document.querySelectorAll(`[${MARK}], #offline-indir-stil, .oi-badge, .oi-actions, .oi-dl-wrap`)) el.remove()
+      for (const el of [toastEl, warnEl, floatEl]) if (el) el.remove()
+      delete window.__offlineIndirDurum
+    }
+  }
 
   const API_ORIGIN = new URL(API).origin
   const LABEL = 'Cihaza indir (offline)'
@@ -185,6 +223,9 @@
 .oi-badge.oi-active{background:#7b5bf5}
 .oi-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(5,4,15,.72);display:flex;align-items:center;justify-content:center}
 .oi-frame{width:min(1100px,94vw);height:min(860px,92vh);border:0;border-radius:14px;background:#14121f;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.oi-btn.oi-done{background:#3a2f7a}
+.oi-navfloat{position:fixed;left:5.5rem;top:1.2rem;z-index:2147483000;height:3rem;padding:0 1.3rem;font-size:1rem}
+.oi-nav{cursor:pointer}
 .oi-warn{position:fixed;left:1rem;bottom:1rem;z-index:2147483647;max-width:28rem;padding:.6rem 2rem .6rem .8rem;border-radius:.6rem;font:500 .85rem/1.35 inherit;font-family:inherit;color:#fff;background:#8a5a12;box-shadow:0 6px 20px rgba(0,0,0,.45)}
 .oi-warn button{position:absolute;right:.3rem;top:.3rem;border:0;background:none;color:#fff;cursor:pointer;font-size:1rem}`
   function addStyle () {
@@ -255,9 +296,30 @@
     return list[list.length - 1] || null
   }
 
+  // Stremio menüleri (Radix) dışarı tıklamayı `pointerdown` ile, Esc'yi odaktaki öğeden yükselen
+  // `keydown` ile algılar; yalnızca fare olayları menüyü kapatmaz (D1). Üçüncü güvence: menü hâlâ
+  // açıksa tetikleyici düğmeye `pointerdown` yollanır (Radix tetikleyicisi açık menüyü kapatır).
+  function pointerEvt (type, extra) {
+    const init = { bubbles: true, cancelable: true, pointerType: 'mouse', button: 0, isPrimary: true, ...extra }
+    try { return new PointerEvent(type, init) } catch { return new MouseEvent(type, init) }
+  }
   function closeMenus () {
-    for (const type of ['mousedown', 'mouseup', 'click']) document.body.dispatchEvent(new MouseEvent(type, { bubbles: true }))
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }))
+    const trigger = document.querySelector('button[aria-haspopup="menu"][aria-expanded="true"]')
+    const active = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body
+    document.body.dispatchEvent(pointerEvt('pointerdown'))
+    for (const type of ['mousedown', 'pointerup', 'mouseup', 'click']) {
+      document.body.dispatchEvent(type === 'pointerup' ? pointerEvt(type) : new MouseEvent(type, { bubbles: true, cancelable: true }))
+    }
+    for (const type of ['keydown', 'keyup']) {
+      active.dispatchEvent(new KeyboardEvent(type, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true }))
+    }
+    if (trigger) {
+      setTimeout(() => {
+        if (!stopped && trigger.isConnected && trigger.getAttribute('aria-expanded') === 'true') {
+          trigger.dispatchEvent(pointerEvt('pointerdown', { ctrlKey: false }))
+        }
+      }, 250)
+    }
   }
 
   /** Stremio'nun kendi tıklama işleyicilerine ulaşmadan bizim eylemi çalıştırır. */
@@ -349,7 +411,7 @@
   }
 
   // Sağ tıktan sonra menü hiç bulunamazsa yapı değişmiştir.
-  document.addEventListener('contextmenu', e => {
+  on(document, 'contextmenu', e => {
     const row = e.target && e.target.closest && e.target.closest('a[href*="#/player/"]')
     if (!row) return
     setTimeout(() => {
@@ -364,12 +426,14 @@
   let pollTimer = null
   async function refresh () {
     clearTimeout(pollTimer)
+    if (stopped) return
     try {
       if (saf.parseRoute(location.hash).name !== 'player') {
         const r = await fetch(API + '/api/items', { cache: 'no-store' })
         if (r.ok) { index = saf.offlineIndex((await r.json()).items); schedule() }
       }
     } catch { /* servis kapalı: son bilinen durum kalır */ }
+    if (stopped) return
     pollTimer = setTimeout(refresh, document.visibilityState === 'visible' ? 5000 : 15000)
   }
 
@@ -415,7 +479,7 @@
     }, 10000)
     frame.focus()
   }
-  document.addEventListener('keydown', e => {
+  on(document, 'keydown', e => {
     if (overlay && e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); closeCenter() }
   }, true)
 
@@ -428,7 +492,7 @@
     }
   }
 
-  window.addEventListener('message', e => {
+  on(window, 'message', e => {
     if (!overlay || e.source !== overlay.frame.contentWindow) return
     if (!saf.isHostMessage(e.data, e.origin, API_ORIGIN)) return
     if (e.data.type === 'kapat') closeCenter()
@@ -491,10 +555,11 @@
       const b = makeBtn('indir', route.type === 'movie' ? '⬇ İndir' : '⬇ Sezonu indir', '', () => {
         const r = saf.parseRoute(location.hash)
         if (r.name !== 'detail') return
+        // İçerik iniyor ya da inmişse sürüm seçici yerine İndirilenler açılır (D2).
+        if (saf.downloadButton(index.get(r.id), r.type).state !== 'none') { openCenter({ name: 'indirilenler' }); return }
         if (r.type === 'series') r.season = currentSeason(r)
         openCenter(r)
       })
-      b.title = route.type === 'movie' ? 'Sürüm seç ve cihaza indir (Offline İndir)' : 'Sezonu ya da bölümleri cihaza indir (Offline İndir)'
       b.setAttribute('data-oi-for', key)
       if (useFloat) floatBox().appendChild(b)
       else {
@@ -504,6 +569,15 @@
         wrap.appendChild(b)
         actions.appendChild(wrap)
       }
+    }
+
+    // Düğme metni içeriğin durumunu yansıtır (D2): "İniyor %x" / "İndirildi".
+    const dl = document.querySelector(`[${MARK}="indir"][data-oi-for="${key}"]`)
+    if (dl) {
+      const st = saf.downloadButton(index.get(route.id), route.type)
+      if (dl.textContent !== st.text) dl.textContent = st.text
+      if (dl.title !== st.title) dl.title = st.title
+      dl.classList.toggle('oi-done', st.state === 'done')
     }
 
     // "Offline oynat" (yalnızca inmiş film)
@@ -564,13 +638,79 @@
     }
   }
 
+  // ---- yan gezinme çubuğunda kalıcı "İndirilenler" girişi
+  const NAV_ICON = '<path d="M256 64v250m0 0L160 218m96 96 96-96M96 400h320" fill="none" stroke="currentColor" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>'
+  const NAV_ROUTES = new Set(['board', 'discover', 'library', 'calendar', 'addons', 'settings'])
+  let navSince = 0
+  let navFloat = null
+  function dropNavFloat () { if (navFloat) { navFloat.remove(); navFloat = null } }
+  function openDownloads () { openCenter({ name: 'indirilenler' }) }
+  function makeNavEntry (sample) {
+    const a = sample.cloneNode(true)
+    a.className = String(sample.getAttribute('class') || '').split(/\s+/).filter(c => c && c !== 'selected' && c !== 'active').join(' ') + ' oi-nav'
+    a.removeAttribute('href')
+    a.setAttribute('role', 'button')
+    a.setAttribute('tabindex', '0')
+    a.title = 'İndirilenler'
+    a.setAttribute(MARK, 'nav')
+    const label = a.querySelector('div') || a.querySelector('span')
+    if (label) label.textContent = 'İndirilenler'
+    const svg = a.querySelector('svg')
+    if (svg) { svg.setAttribute('viewBox', '0 0 512 512'); svg.innerHTML = NAV_ICON }
+    shield(a)
+    a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openDownloads() })
+    a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openDownloads() } })
+    return a
+  }
+  function decorateNav (route) {
+    // Gezinme çubuğundaki sekme bağlantıları, üst öğelerine (nav) göre gruplanır. Çubuk sınıfının
+    // adına değil sekme düğmesinin sınıf köküne (nav-tab-button-container) güvenilir.
+    const groups = new Map()
+    for (const a of byClass('nav-tab-button-container')) {
+      if (a.hasAttribute(MARK)) continue
+      const p = a.parentElement
+      if (p) { if (!groups.has(p)) groups.set(p, []); groups.get(p).push(a) }
+    }
+    let shown = 0
+    for (const [p, tabs] of groups) {
+      const mine = p.querySelector(`[${MARK}="nav"]`)
+      if (!visible(p)) { if (mine) mine.remove(); continue }
+      shown++
+      if (mine) continue
+      const lib = tabs.find(a => /#\/library/.test(a.getAttribute('href') || ''))
+      const entry = makeNavEntry(lib || tabs[tabs.length - 1])
+      const anchor = lib || tabs[Math.min(2, tabs.length - 1)]
+      anchor.after(entry)
+    }
+    // Yinelenenleri ve gizli çubuklarda kalanları temizle.
+    for (const el of document.querySelectorAll(`[${MARK}="nav"]`)) if (!visible(el)) el.remove()
+    if (shown) { dropNavFloat(); return }
+    // Çubuk yok. Çubuğu olması gereken sayfada (ana ekran, keşif, kütüphane…) kısa süre bekle, hâlâ
+    // yoksa yapı değişmiştir: uyar. Film/dizi sayfası gibi çubuğu hiç olmayan sayfalarda uyarı yok,
+    // doğrudan köşede sabit düğme gösterilir.
+    if (NAV_ROUTES.has(route.name)) {
+      if (Date.now() - navSince < 8000) return
+      warnOnce('nav', 'gezinme çubuğu (nav-tab-button-container) bulunamadı, "İndirilenler" köşede sabit düğme olarak gösteriliyor')
+    }
+    if (!navFloat || !navFloat.isConnected) {
+      navFloat = makeBtn('nav-yedek', '⬇ İndirilenler', 'oi-navfloat', openDownloads)
+      document.body.appendChild(navFloat)
+    }
+  }
+
   // ---- tarama
   function scan () {
     for (const m of document.querySelectorAll('[class*="context-menu-content-"]')) addStreamItem(m)
     for (const m of document.querySelectorAll('[role="menu"]')) addCardItem(m)
     const route = saf.parseRoute(location.hash)
-    if (route.name !== lastRouteName) { lastRouteName = route.name; boardSince = Date.now() }
-    if (route.name === 'player') { dropFloat(); return }
+    if (route.name !== lastRouteName) { lastRouteName = route.name; boardSince = Date.now(); navSince = Date.now() }
+    if (route.name === 'player') {
+      // Oynatıcıda hiçbir düğme olmaz.
+      dropFloat(); dropNavFloat()
+      for (const el of document.querySelectorAll(`[${MARK}="nav"]`)) el.remove()
+      return
+    }
+    decorateNav(route)
     if (route.name === 'detail') decorateDetail(route)
     else { detailKey = ''; dropFloat() }
     decorateCards(route)
@@ -579,7 +719,7 @@
   function schedule () {
     if (scheduled) return
     scheduled = true
-    setTimeout(() => { scheduled = false; try { scan() } catch (e) { console.warn('[Offline İndir] tarama hatası:', e) } }, 120)
+    setTimeout(() => { scheduled = false; if (stopped) return; try { scan() } catch (e) { console.warn('[Offline İndir] tarama hatası:', e) } }, 120)
   }
 
   // Tanılama: CDP ya da konsoldan durum okumak için.
@@ -590,15 +730,18 @@
 
   function start () {
     addStyle()
-    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true })
-    window.addEventListener('hashchange', () => {
+    const mo = new MutationObserver(schedule)
+    mo.observe(document.documentElement, { childList: true, subtree: true })
+    disposers.push(() => mo.disconnect())
+    on(window, 'hashchange', () => {
       if (overlay && saf.parseRoute(location.hash).name === 'player') closeCenter()
       schedule()
     })
-    setInterval(schedule, 2000) // gecikmeli yapı denetimleri (8–10 sn) için
+    const iv = setInterval(schedule, 2000) // gecikmeli yapı denetimleri (8–10 sn) için
+    disposers.push(() => clearInterval(iv))
     refresh()
     scan()
   }
   if (document.documentElement && document.body && document.head) start()
-  else document.addEventListener('DOMContentLoaded', start)
+  else on(document, 'DOMContentLoaded', start)
 })()
