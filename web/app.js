@@ -45,6 +45,7 @@ function fmtEta (s) {
 // Değerler bayt/sn; 0 = sınırsız. Hazır seçenekler + "Elle gir…" (MB/sn ya da KB/sn).
 const MB = 1e6
 const DL_PRESETS = [[0, 'Sınırsız'], [1 * MB, '1 MB/sn'], [2 * MB, '2 MB/sn'], [5 * MB, '5 MB/sn'], [10 * MB, '10 MB/sn']]
+const TH_PRESETS = [[0, 'Kısma yok'], [100e3, '100 KB/sn'], [200e3, '200 KB/sn'], [500e3, '500 KB/sn'], [1 * MB, '1 MB/sn']]
 const UL_PRESETS = [[0, 'Sınırsız'], [50e3, '50 KB/sn'], [100e3, '100 KB/sn'], [250e3, '250 KB/sn'], [500e3, '500 KB/sn'], [1 * MB, '1 MB/sn']]
 const fmtLimit = n => (n > 0 ? fmtSpeed(n) : 'Sınırsız')
 function limitPicker ({ presets, unit = 'MB', label, onSet, okText }) {
@@ -242,9 +243,15 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     hepsine.disabled = true
     try { await post('/api/settings', { applyToAll: true }); toast('Bütün indirmelerin hız sınırı: ' + fmtLimit(varsayilan.value), 'ok'); await tick() } catch (e) { toast(e.message, 'hata') } finally { hepsine.disabled = false }
   })
+  const kisma = limitPicker({
+    presets: TH_PRESETS, unit: 'KB', label: 'Öncelikli indirme varken diğerlerinin hızı',
+    onSet: v => post('/api/settings', { priorityThrottle: v }),
+    okText: v => v > 0 ? 'Öncelik varken diğer indirmeler: ' + fmtLimit(v) : 'Öncelik diğer indirmeleri kısmaz'
+  })
   const sinirAyar = h('div', { class: 'araclar sinirlar' },
     h('span', { class: 'sinirEtiket' }, 'Yeni indirmeler için hız sınırı', varsayilan.el), hepsine,
-    h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el))
+    h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el),
+    h('span', { class: 'sinirEtiket', title: 'Bir indirme ★ öncelikli yapılınca diğer etkin indirmeler bu hıza kısılır (durmaz)' }, '★ Öncelik varken diğerleri', kisma.el))
 
   root.append(
     h('h1', null, baslik),
@@ -284,7 +291,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     set(strip.bos, s.diskFreeBytes != null ? fmtBytes(s.diskFreeBytes) : '—')
     set(strip.hiz, fmtSpeed(s.downloadSpeed))
     set(strip.aktif, String(s.active))
-    if (s.settings) { varsayilan.set(s.settings.defaultDownloadLimit); yukleme.set(s.settings.uploadLimit) }
+    if (s.settings) { varsayilan.set(s.settings.defaultDownloadLimit); yukleme.set(s.settings.uploadLimit); kisma.set(s.settings.priorityThrottle) }
     motorUyari.hidden = !s.engine || s.engine.ready !== false ? true : false
     if (s.engine && s.engine.ready === false && s.engine.error) motorUyari.textContent = 'İndirme motoru hazır değil: ' + s.engine.error
   }
@@ -316,6 +323,12 @@ function viewHome (root, current, baslik = 'İndirmeler') {
         if (what === 'iptal') await post(`/api/items/${it.id}/cancel`)
         else await api(`/api/items/${it.id}${r.tik ? '?keepFiles=1' : ''}`, { method: 'DELETE' })
         toast(what === 'iptal' ? 'İndirme iptal edildi.' : 'Silindi.', 'ok')
+      } else if (what === 'oncelik') {
+        btn.disabled = true
+        const on = !it.priority
+        const v = await post(`/api/items/${it.id}/priority`, { priority: on })
+        const c = cards.get(it.id); if (c && v) c.update(v)
+        toast(on ? '★ Öncelikli: ' + (it.displayName || it.name) : 'Öncelik kaldırıldı.', 'ok')
       } else {
         btn.disabled = true
         const v = await post(`/api/items/${it.id}/${what === 'duraklat' ? 'pause' : 'resume'}`)
@@ -344,13 +357,15 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       onSet: v => post(`/api/items/${it.id}/limit`, { downloadLimit: v }),
       okText: v => 'Hız sınırı: ' + fmtLimit(v)
     })
-    const sinirSatiri = h('div', { class: 'sinirSatiri' }, h('span', { class: 'soluk' }, 'Hız sınırı'), sinir.el)
+    const kisildi = h('span', { class: 'kisildi', hidden: true })
+    const sinirSatiri = h('div', { class: 'sinirSatiri' }, h('span', { class: 'soluk' }, 'Hız sınırı'), sinir.el, kisildi)
     const dosyaListe = h('div')
     const det = h('details', { class: 'dosyalar', hidden: true }, h('summary', null, 'Bölümler'), dosyaListe)
     const btn = {
       oynat: h('button', { class: 'dugme oynat', 'data-a': 'oynat' }, '▶ Oynat'),
       duraklat: h('button', { class: 'dugme gri', 'data-a': 'duraklat' }, '⏸ Duraklat'),
       surdur: h('button', { class: 'dugme', 'data-a': 'surdur' }, '▶ Sürdür'),
+      oncelik: h('button', { class: 'dugme gri oncelik', 'data-a': 'oncelik', 'aria-pressed': 'false', title: 'Öncelikli yap: bu indirme tam hızda sürer, diğer etkin indirmeler yavaşlar' }, '☆ Öncelik'),
       iptal: h('button', { class: 'dugme hayalet', 'data-a': 'iptal' }, 'İptal'),
       sil: h('button', { class: 'dugme hayalet', 'data-a': 'sil' }, 'Sil')
     }
@@ -389,6 +404,14 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       })
       sinirSatiri.hidden = done // bitmiş indirmenin süreci yok, sınır anlamsız
       sinir.set(it.downloadLimit ?? 0)
+      upd('kisildi', it.throttled ? 'Öncelik nedeniyle kısıldı: ' + fmtLimit(it.effectiveLimit) : '', t => { kisildi.textContent = t; kisildi.hidden = !t })
+      btn.oncelik.hidden = done
+      upd('oncelik', !!it.priority, on => {
+        btn.oncelik.setAttribute('aria-pressed', String(on))
+        btn.oncelik.textContent = on ? '★ Öncelikli' : '☆ Öncelik'
+        btn.oncelik.title = on ? 'Önceliği kaldır: diğer indirmeler kendi sınırlarına döner' : 'Öncelikli yap: bu indirme tam hızda sürer, diğer etkin indirmeler yavaşlar'
+      })
+      el.classList.toggle('oncelikli', !!it.priority && !done)
       btn.oynat.hidden = !(done || it.state === 'downloading')
       btn.oynat.classList.toggle('gri', !done); btn.oynat.classList.toggle('oynat', done)
       btn.duraklat.hidden = !(it.state === 'downloading' || it.state === 'resolving')

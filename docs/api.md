@@ -34,6 +34,9 @@ Genel kurallar:
   "peers": 37,                            // bağlı kaynak (eş) sayısı
   "engineState": "live",                  // motor durumu (initializing | live), yalnızca inerken
   "downloadLimit": 2000000,               // bu indirmenin hız sınırı, bayt/sn; 0 = sınırsız (kalıcı)
+  "priority": false,                      // öncelikli mi (en çok bir öğe; kalıcı)
+  "effectiveLimit": 200000,               // şu an uygulanan sınır (öncelik kısması dahil), bayt/sn
+  "throttled": true,                      // başka bir indirmenin önceliği yüzünden kısıldı
   "source": { "title": "...", "quality": "720p", "sizeGB": 0.14, "seeders": 23, "site": "YTS", "languages": ["gb"] },
   "poster": "http://127.0.0.1:11480/img/tt1727587-poster",   // yerelde yoksa ""
   "playUrl": "http://127.0.0.1:11480/play/movie/tt1727587/<infoHash>/5",
@@ -93,12 +96,14 @@ Notlar:
 ### Hız sınırı
 Birim **bayt/sn**, `0` = sınırsız, en çok 4294967295. Geçersiz değer `400`.
 - `POST /api/items/:id/limit` gövde `{ "downloadLimit": 2000000 }` → öğe. Bu indirmenin indirme sınırı. Çalışan sürece **hemen** uygulanır (süreç yeniden başlamaz); öğede saklanır, yeniden başlatmada korunur. Duraklatılmış/hatalı öğede kaydedilir, sürdürülünce geçerli olur.
-- `GET /api/settings` → `{ defaultDownloadLimit, uploadLimit }`.
+- `GET /api/settings` → `{ defaultDownloadLimit, uploadLimit, priorityThrottle }`.
 - `POST /api/settings` gövde (alanların hepsi isteğe bağlı) `{ "defaultDownloadLimit": 0, "uploadLimit": 100000, "applyToAll": true }` → ayarlar.
   - `defaultDownloadLimit`: yeni eklenen indirmelerin aldığı sınır. Var olanlar değişmez.
   - `applyToAll: true`: varsayılanı **bütün** öğelere yazar (çalışanlara hemen uygulanır).
   - `uploadLimit`: yükleme sınırı; her süreç için ayrı uygulanır (N etkin indirme ≈ N × sınır). Bitmiş indirme zaten yükleme yapmaz (süreci kapatılır).
   - Kalıcı: `data/ayarlar.json`. İlk değerler `config.json` (`downloadLimit`, `uploadLimit`) ya da `OFFLINE_RATELIMIT_DOWN`/`OFFLINE_RATELIMIT_UP`'tan gelir; arayüzden değiştirilen değer sonra geçerlidir.
+- `POST /api/items/:id/priority` gövde `{ "priority": true | false }` → öğe. **Öncelik**: aynı anda en çok bir öğe öncelikli olur (yenisi verilince önceki kalkar). Öncelikli öğe etkinken (`resolving`/`downloading`) diğer etkin indirmelerin etkin sınırı `min(kayıtlı sınır, priorityThrottle)` olur; durmazlar, kayıtlı `downloadLimit` değişmez (`throttled`, `effectiveLimit` alanları gösterir). Öncelikli öğe duraklatılınca, bitince, silinince ya da öncelik kaldırılınca diğerleri kendi sınırlarına döner (duraklatmada işaret kalır, sürdürülünce kısma yeniden başlar; bitince/silinince işaret kalkar). Tamamlanmış öğeye `409`. Kalıcıdır.
+- `POST /api/settings` `{ "priorityThrottle": 200000 }`: kısma hızı (vars. 200 KB/sn; `0` = öncelik kimseyi kısmaz), kalıcı, çalışan süreçlere hemen uygulanır.
 - `GET /api/engines` (tanı) → `{ control: { apiPort, pid, ready }, engines: [{ infoHash, slot, apiPort, peerPort, pid, ready, restarts, limits }] }`.
 
 ### Torrentio katmanı
@@ -164,7 +169,7 @@ Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`in
 
 | Adres | Ekran |
 |---|---|
-| `/#/` | İndirmeler / İndirilenler (özet şeridi, hız sınırı ayarları, kartlar, duraklat/sürdür/iptal/sil/oynat, kart başına hız sınırı) |
+| `/#/` | İndirmeler / İndirilenler (özet şeridi, hız sınırı ve öncelik kısma ayarları, kartlar, duraklat/sürdür/iptal/sil/oynat, kart başına hız sınırı ve ★ öncelik) |
 | `/#/indirilenler` | Aynı liste, başlığı "İndirilenler"; Stremio'nun gezinme çubuğundaki giriş ve film sayfasındaki "İndirildi/İniyor" düğmesi bunu açar |
 | `/#/ara`, `/#/ara/<söz>` | Başlık arama |
 | `/#/dizi/<tt…>` | Dizinin sezon listesi |
@@ -209,6 +214,7 @@ Gömülü olmayan kipte "oynat" aynı `playUrl`'i yeni sekmede açar. Ana pencer
 | `metadataTimeoutSec` | 90 | |
 | `downloadLimit` | 0 | yeni indirmeler için varsayılan sınırın **ilk değeri**, bayt/sn, 0 sınırsız (sonrası `data/ayarlar.json`) |
 | `uploadLimit` | 100000 | yükleme sınırının ilk değeri, bayt/sn, süreç başına |
+| `priorityThrottle` | 200000 | öncelik varken diğer etkin indirmelerin kısıldığı hız, ilk değer (sonrası `data/ayarlar.json`) |
 
 UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`--disable-dht-persistence`; aynı anda birden çok süreç böylece çakışmaz). Motor oturum kalıcılığı kapalıdır (`--disable-persistence`): doğruluk kaynağı `library.json` + `.torrent` önbelleği (`data/torrents/`); süreç her başladığında torrent aynı klasöre yeniden eklenip doğrulanır. Günlükler: kontrol `data/rqbit/rqbit.log`, indirme süreçleri `data/rqbit/motorlar/<yuva>/rqbit.log` (pid dosyası da orada); servis günlüğü `data/servis.log`. Eski tek oturum (`data/rqbit/oturum`) ilk açılışta `data/rqbit/oturum.v1-yedek` olarak kenara alınır.
 

@@ -82,9 +82,9 @@ describe('indirme başına hız sınırı', () => {
   test('ayarlar: varsayılan sınır, yükleme sınırı (bütün süreçlere), hepsine uygula; kalıcı', async () => {
     const pack = fx.pack.infoHash
     const s0 = await svc.api('GET', '/api/settings')
-    assert.deepEqual(s0, { defaultDownloadLimit: 4 * MiB, uploadLimit: 100000 })
-    const s1 = await svc.api('POST', '/api/settings', { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000 })
-    assert.deepEqual(s1, { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000 })
+    assert.deepEqual(s0, { defaultDownloadLimit: 4 * MiB, uploadLimit: 100000, priorityThrottle: 200000 })
+    const s1 = await svc.api('POST', '/api/settings', { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000 })
+    assert.deepEqual(s1, { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000 })
     // Yükleme sınırı çalışan süreçlere hemen; indirme sınırı (kayıtlı) değişmez
     assert.deepEqual(await engineLimits(svc, pack), { download_bps: MiB / 2, upload_bps: 50000 })
     assert.equal((await svc.api('GET', '/api/status')).settings.uploadLimit, 50000)
@@ -96,7 +96,7 @@ describe('indirme başına hız sınırı', () => {
     // Kalıcı: ayarlar data/ayarlar.json'da
     await svc.stop()
     svc = await startService(sc)
-    assert.deepEqual(await svc.api('GET', '/api/settings'), { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000 })
+    assert.deepEqual(await svc.api('GET', '/api/settings'), { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000 })
     assert.ok(fs.existsSync(path.join(sc.dataDir, 'ayarlar.json')))
     // Yeni indirme yeni varsayılanı alır
     const k = await svc.api('POST', '/api/items', { infoHash: fx.klip.infoHash, files: [0], type: 'movie', id: 'tt0000004' })

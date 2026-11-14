@@ -223,3 +223,8 @@ html.gomulu .bildirimler { top: 52px; }
 .sinirSayi:focus { border-color: var(--vurgu); outline: none; }
 .sinirSatiri { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; }
 .sinirSatiri .sinirSecici select { min-height: 30px; padding: 3px 6px; font-size: 13px; }
+
+/* Öncelik */
+.dugme.oncelik[aria-pressed="true"] { background: #3a2f12; color: var(--uyari); border-color: var(--uyari); }
+.kart.oncelikli { border-color: #6b5a24; }
+.kisildi { color: var(--uyari); font-size: 12.5px; }
