@@ -1,4 +1,4 @@
-// İndirme Merkezi — tek sayfa, çatı kütüphane yok. Rotalar (#): "/" indirmeler, "/ara/<söz>", "/dizi/<tt>",
+// İndirme Merkezi — tek sayfa, çatı kütüphane yok. Rotalar (#): "/" indirmeler, "/indirilenler" (aynı liste), "/ara/<söz>", "/dizi/<tt>",
 // "/surum/<movie|series>/<id>", "/sezon/<tt>/<sezon>". API: docs/api.md. Gömülü kip: ?embed=1
 'use strict'
 
@@ -72,7 +72,7 @@ function onayla ({ baslik, metin, tamam = 'Tamam', tik = null }) {
   })
 }
 
-const QUALITY_RANK = q => /2160|4k|uhd/i.test(q) ? 5 : /1080/.test(q) ? 4 : /720/.test(q) ? 3 : /480/.test(q) ? 2 : q ? 1 : 0
+const { qualityGroup, qualityRank: QUALITY_RANK, qualityLabel, compareQuality, errorText, deleteText } = OfflineYardimci // web/yardimci.js
 const LANG = { gb: 'İngilizce', us: 'İngilizce', tr: 'Türkçe', ru: 'Rusça', ua: 'Ukraynaca', fr: 'Fransızca', de: 'Almanca', es: 'İspanyolca', mx: 'İspanyolca', it: 'İtalyanca', pt: 'Portekizce', br: 'Portekizce', jp: 'Japonca', kr: 'Korece', cn: 'Çince', pl: 'Lehçe', nl: 'Felemenkçe', se: 'İsveççe', gr: 'Yunanca', in: 'Hintçe', sa: 'Arapça', cz: 'Çekçe', hu: 'Macarca', ro: 'Romence', th: 'Tayca' }
 const langName = c => LANG[c] || c.toUpperCase()
 const STATE_TR = { resolving: 'Bilgi alınıyor', downloading: 'İniyor', paused: 'Duraklatıldı', completed: 'Hazır', error: 'Hata' }
@@ -159,7 +159,7 @@ function mainFile (it) {
   return fs.find(f => f.complete) || fs[0] || null
 }
 
-function viewHome (root, current) {
+function viewHome (root, current, baslik = 'İndirmeler') {
   const strip = {
     disk: h('b', null, '—'), bos: h('b', null, '—'), hiz: h('b', null, '—'), aktif: h('b', null, '—')
   }
@@ -173,7 +173,7 @@ function viewHome (root, current) {
   let items = []
 
   root.append(
-    h('h1', null, 'İndirmeler'),
+    h('h1', null, baslik),
     h('p', { class: 'soluk', style: 'margin:0 0 10px' }, 'Cihazına indirilen filmler ve diziler. Bitenler internetsiz de oynar.'),
     motorUyari, baglanti,
     h('div', { class: 'serit' },
@@ -234,7 +234,7 @@ function viewHome (root, current) {
         const ad = it.displayName || it.name
         const r = what === 'iptal'
           ? await onayla({ baslik: 'İndirme iptal edilsin mi?', metin: `“${ad}” indirmesi durdurulur, şimdiye kadar inen kısım silinir ve kayıt kalkar.`, tamam: 'İptal et' })
-          : await onayla({ baslik: 'Silinsin mi?', metin: `“${ad}” kütüphaneden kaldırılır.`, tamam: 'Sil', tik: 'Dosyaları diskte bırak (yalnız kaydı kaldır)' })
+          : await onayla({ baslik: 'Silinsin mi?', metin: deleteText(it, fmtBytes), tamam: 'Sil', tik: 'Dosyaları diskte bırak (yalnız kaydı kaldır)' })
         if (!r.ok) return
         btn.disabled = true
         if (what === 'iptal') await post(`/api/items/${it.id}/cancel`)
@@ -294,7 +294,7 @@ function viewHome (root, current) {
       const pct = Math.floor(it.percent * 10) / 10
       upd('pct', done ? 100 : pct, v => { bar.style.width = v + '%'; cubuk.setAttribute('aria-valuenow', String(Math.floor(v))) })
       const active = it.state === 'downloading'
-      upd('yuzde', done ? '✔ Hazır' : (it.state === 'resolving' ? 'Torrent bilgisi alınıyor…' : '%' + pct.toFixed(1)), t => { sYuzde.textContent = t })
+      upd('yuzde', done ? '✔ Hazır' : (it.state === 'resolving' ? 'Torrent bilgisi alınıyor…' : (it.state === 'error' && !pct ? '' : '%' + pct.toFixed(1))), t => { sYuzde.textContent = t; sYuzde.hidden = !t })
       upd('hiz', active ? '↓ ' + fmtSpeed(it.downloadSpeed) : '', t => { sHiz.textContent = t; sHiz.hidden = !t })
       upd('kalan', active ? 'Kalan: ' + fmtEta(it.eta) : '', t => { sKalan.textContent = t; sKalan.hidden = !t })
       upd('kaynak', active ? it.peers + ' kaynak' : '', t => { sKaynak.textContent = t; sKaynak.hidden = !t })
@@ -303,7 +303,7 @@ function viewHome (root, current) {
       upd('kalite', q, t => { sKalite.textContent = t; sKalite.hidden = !t })
       upd('hata', it.state === 'error' ? it.error || 'Bilinmeyen bir sorun oluştu.' : '', t => {
         hata.hidden = !t
-        hata.textContent = t ? 'Sorun: ' + t + ' “Sürdür” ile yeniden deneyebilirsin.' : ''
+        hata.textContent = t ? errorText(t) : ''
       })
       btn.oynat.hidden = !(done || it.state === 'downloading')
       btn.oynat.classList.toggle('gri', !done); btn.oynat.classList.toggle('oynat', done)
@@ -357,7 +357,9 @@ function viewHome (root, current) {
   document.addEventListener('visibilitychange', onVis)
   return () => { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVis) }
 }
-route(/^\/$/, viewHome, 'indirmeler')
+route(/^\/$/, (r, c) => viewHome(r, c), 'indirmeler')
+// Stremio gezinme çubuğundaki "İndirilenler" girişi: aynı liste (Tümü süzgeci), başlık farklı.
+route(/^\/indirilenler$/, (r, c) => viewHome(r, c, 'İndirilenler'), 'indirmeler')
 
 // ───────────────────────── 2) Arama ─────────────────────────
 async function viewAra (root, q, current) {
@@ -451,10 +453,11 @@ async function viewSurum (root, type, id, current) {
     const vs = data.versions
     const st = { key: 'seeders', dir: -1, quality: 'hepsi', lang: 'hepsi', limit: 80 }
     if (!vs.length) { govde.append(h('div', { class: 'bos-liste' }, 'Bu içerik için hiç sürüm bulunamadı.')); return }
-    const quals = [...new Set(vs.map(v => v.quality || '?'))].sort((a, b) => QUALITY_RANK(b) - QUALITY_RANK(a))
+    // Süzgeç düğmeleri kalite gruplarıdır (1226p gibi sıra dışı değerler en yakın gruba katılır; bilinmeyen '?' en sonda).
+    const quals = [...new Set(vs.map(v => qualityGroup(v.quality) || '?'))].sort((a, b) => (a === '?') - (b === '?') || QUALITY_RANK(b) - QUALITY_RANK(a))
     const langs = [...new Set(vs.flatMap(v => v.languages || []))].sort((a, b) => (b === 'tr') - (a === 'tr') || a.localeCompare(b))
     const hasNoLang = vs.some(v => !(v.languages || []).length)
-    const qChips = ['hepsi', ...quals].map(q => h('button', { type: 'button', class: 'cip', 'aria-pressed': String(q === 'hepsi'), 'data-q': q }, q === 'hepsi' ? 'Tüm kaliteler' : q))
+    const qChips = ['hepsi', ...quals].map(q => h('button', { type: 'button', class: 'cip', 'aria-pressed': String(q === 'hepsi'), 'data-q': q }, q === 'hepsi' ? 'Tüm kaliteler' : (q === '?' ? 'Bilinmeyen' : qualityLabel(q))))
     const langSel = h('select', { 'aria-label': 'Dil süzgeci' },
       h('option', { value: 'hepsi' }, 'Tüm diller'),
       langs.map(l => h('option', { value: l }, langName(l))),
@@ -484,10 +487,10 @@ async function viewSurum (root, type, id, current) {
 
     const keyVal = { seeders: v => v.seeders || 0, size: v => v.sizeBytes || (v.sizeGB || 0) * 1e9, quality: v => QUALITY_RANK(v.quality) }
     function ciz () {
-      let l = vs.filter(v => (st.quality === 'hepsi' || (v.quality || '?') === st.quality) &&
+      let l = vs.filter(v => (st.quality === 'hepsi' || (qualityGroup(v.quality) || '?') === st.quality) &&
         (st.lang === 'hepsi' || (st.lang === '-' ? !(v.languages || []).length : (v.languages || []).includes(st.lang))))
       const f = keyVal[st.key]
-      l = [...l].sort((a, b) => st.dir * (f(a) - f(b)) || b.seeders - a.seeders)
+      l = [...l].sort((a, b) => (st.key === 'quality' ? compareQuality(a.quality, b.quality, st.dir) : st.dir * (f(a) - f(b))) || b.seeders - a.seeders)
       sayac.textContent = l.length + ' / ' + vs.length + ' sürüm'
       const rows = l.slice(0, st.limit).map(satir)
       if (l.length > st.limit) rows.push(h('tr', null, h('td', { colspan: '7' }, h('button', { class: 'dugme gri', onclick: () => { st.limit += 80; ciz() } }, `Daha fazla göster (${l.length - st.limit} sürüm daha)`))))
@@ -541,7 +544,7 @@ async function viewSurum (root, type, id, current) {
       doldur()
       const adSatiri = h('td', { class: 'ad', 'data-et': 'Ad' }, h('b', null, v.name || '—'), v.fileName && v.fileName !== v.name ? h('div', null, v.fileName) : null, h('div', null, tags))
       return h('tr', null,
-        td('Kalite', 'kalite', v.quality || '?', v.kind === 'pack' ? h('span', { class: 'etiket', title: 'Bu bölüm bir sezon paketinin içinden indirilir; yalnızca bu bölümün dosyası inecek. Bildirilen boyut bölümün ya da tüm paketin boyutu olabilir.' }, 'paketten') : null),
+        td('Kalite', 'kalite', h('span', { title: v.quality && qualityLabel(v.quality) !== v.quality ? 'Torrentio’nun bildirdiği: ' + v.quality : null }, qualityLabel(v.quality)), v.kind === 'pack' ? h('span', { class: 'etiket', title: 'Bu bölüm bir sezon paketinin içinden indirilir; yalnızca bu bölümün dosyası inecek. Bildirilen boyut bölümün ya da tüm paketin boyutu olabilir.' }, 'paketten') : null),
         td('Boyut', 'say', v.sizeGB ? (v.kind === 'pack' ? '≈ ' : '') + v.sizeGB.toFixed(2) + ' GB' : '—'),
         td('Kaynak', 'say', String(v.seeders ?? 0)),
         td('Dil', '', lang.length ? lang : h('span', { class: 'soluk', title: 'Dil bilgisi verilmemiş (çoğunlukla yalnız İngilizce)' }, '—')),
@@ -658,7 +661,7 @@ async function viewSezon (root, imdb, seasonStr, current) {
         const kart = h('label', { class: 'paket' + (secili ? ' secili' : '') },
           h('div', { class: 'ust2' },
             h('input', { type: 'radio', name: 'paket', checked: secili, onchange: () => selectPack(p) }),
-            h('b', { class: 'kalite' }, p.quality || '?'),
+            h('b', { class: 'kalite' }, qualityLabel(p.quality)),
             h('span', null, `${p.episodeCount}/${data.episodeCount} bölüm`),
             h('span', { class: 'soluk' }, `${p.seeders} kaynak · ${p.source || '—'}`),
             (p.languages || []).slice(0, 3).map(c => h('span', { class: 'etiket' }, langName(c))),
@@ -717,7 +720,7 @@ async function viewSezon (root, imdb, seasonStr, current) {
     }
     kurSatirlar()
     const qualities = [...new Set(data.episodes.flatMap(e => (e.options || []).map(o => o.quality)).filter(Boolean))].sort((a, b) => QUALITY_RANK(b) - QUALITY_RANK(a))
-    const optText = o => `${o.quality || '?'} · ${o.sizeGB ? o.sizeGB.toFixed(2) + ' GB' : '? GB'} · ${o.seeders} kaynak · ${o.source || '—'}${(o.languages || []).length ? ' · ' + o.languages.map(langName).slice(0, 2).join('/') : ''}`
+    const optText = o => `${qualityLabel(o.quality)} · ${o.sizeGB ? o.sizeGB.toFixed(2) + ' GB' : '? GB'} · ${o.seeders} kaynak · ${o.source || '—'}${(o.languages || []).length ? ' · ' + o.languages.map(langName).slice(0, 2).join('/') : ''}`
 
     function cizBolum () {
       if (!data.episodes.length) { icerik.append(h('div', { class: 'bos-liste' }, 'Bu sezonun bölüm listesi alınamadı.')); return }
