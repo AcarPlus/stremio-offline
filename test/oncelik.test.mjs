@@ -29,6 +29,8 @@ describe('indirme önceliği', () => {
     const r = await svc.api('POST', `/api/items/${film()}/priority`, { priority: true })
     assert.equal(r.priority, true)
     assert.equal(r.throttled, false)
+    // Kısma, öncelikli indirme gerçekten veri almaya başlayınca (ilerleme görülünce) başlar
+    await waitFor(async () => (await dlimit(svc, pack())) === 200000, { timeout: 10000, what: 'veri akınca diğeri kısıldı' })
     assert.equal(await dlimit(svc, pack()), 200000, 'diğerinin motoru kısma hızında')
     assert.equal(await dlimit(svc, film()), MiB, 'öncelikli kendi sınırında')
     const p = await svc.item(pack())
@@ -94,7 +96,7 @@ describe('indirme önceliği', () => {
     await svc.api('POST', '/api/items', { infoHash: fx.klip.infoHash, files: [0], type: 'movie', id: 'tt0000004' })
     await waitFor(async () => (await engineOf(svc, fx.klip.infoHash))?.ready, { what: 'klip motoru' })
     await svc.api('POST', `/api/items/${fx.klip.infoHash}/priority`, { priority: true })
-    assert.equal(await dlimit(svc, pack()), 200000)
+    await waitFor(async () => (await dlimit(svc, pack())) === 200000, { timeout: 10000, what: 'klip veri alınca paket kısıldı' })
     const s = await svc.api('POST', '/api/settings', { priorityThrottle: 300000 })
     assert.equal(s.priorityThrottle, 300000)
     assert.equal(await dlimit(svc, pack()), 300000, 'yeni kısma hızı hemen uygulanır')
