@@ -21,7 +21,9 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 - `test/`: yerel döngü sınamaları (`npm test`).
 - `inject.js`: akış sağ tık menüsüne ve kart üç nokta menüsüne "Cihaza indir" ekler. Stremio'nun hata ayıklama kapısı (11481) üzerinden yüklenir.
   Faz 3: film sayfasında "İndir", dizi sayfasında "Sezonu indir" (İndirme Merkezi iframe'de, `?embed=1`), poster rozeti, inmiş filmde "Offline oynat", `oynat` iletisiyle Stremio oynatıcısında yerel dosya. Sınıf köküne tutunur, yapı değişince uyarır; saf kısmı `test/inject.test.mjs`. Ayrıntı: `docs/faz3-rapor.md`.
-- `stremio-baslat.ps1`: servisi ve Stremio'yu kapı açık şekilde başlatır.
+- Faz 4 (kalıcı kurulum): `kur.ps1` yalnızca kullanıcının klasörlerine üç `.lnk` ekler (kayıt defteri, ortam değişkeni, görev, hizmet, güvenlik duvarı, yönetici yetkisi yok): Başlangıç klasöründe "Stremio Offline Servis" (oturum açılınca `baslat-servis.vbs` → `node server.mjs`, pencere yok), masaüstü ve Başlat menüsünde "Stremio Offline" (`baslat-stremio.vbs` → gizli `stremio-baslat.ps1`). `kaldir.ps1` geri alır (`-ServisiDurdur` isteğe bağlı). Servis zaten çalışıyorsa ikinci örnek hiçbir şeye dokunmadan sessizce çıkar (`server.mjs` başında `/manifest.json` yoklaması; `EADDRINUSE` yarışı da aynı şekilde). `stremio-baslat.ps1`: servis yoksa gizli başlatır; Stremio kapalıysa hata ayıklama kapısıyla (yalnızca o sürece verilen `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`) açar; düğmesiz açıksa **sorar** (izlenen bir şey kesilmesin), düğmeliyse dokunmaz. Sınama için `OFFLINE_PORT` ve `OFFLINE_STREMIO_EXE` ortam değişkenleri okunur.
+- `lib/inject.mjs` kapıyı her 3 sn yoklar: Stremio sonradan açılsa, yeniden başlasa ya da sayfası yenilense betik kendiliğinden yüklenir. `inject.js` kendini `__SURUM__` (içerik karması) ile tanır; servis yeniden başlayınca sayfada farklı sürümden eski kopya varsa önce söküp (dinleyiciler, zamanlayıcılar, öğeler) yenisini kurar, sayfa yenilemek gerekmez. (Sürüm damgasından önceki kopya sökülemez, o sayfa yenilenene dek kalır.)
+- Faz 4 arayüz: Stremio'nun yan gezinme çubuğunda (`nav-tab-button-container` kökü, Library'den sonra) kalıcı "İndirilenler" girişi → gömülü İndirme Merkezi `#/indirilenler`. Çubuğu olmayan sayfalarda (film/dizi) sol üstte küçük düğme; çubuğu olması gereken sayfada bulunamazsa 8 sn sonra düğme + yapı uyarısı. Oynatıcıda yok. Film sayfasındaki "İndir" düğmesi içerik iniyorsa "İniyor %x", inmişse "İndirildi" yazar ve tıklayınca İndirilenler'i açar. Kart menüsü kapanışı (D1): `pointerdown` + Esc + tetikleyiciye `pointerdown`.
 - `tools/cdp-eval.mjs`, `tools/cdp-run.mjs`: Stremio sayfasında JS çalıştıran yardımcılar.
 - `docs/faz0-rapor.md`: motor ölçümü ve rqbit API başvurusu (Faz 0 çıktısı).
 
@@ -37,7 +39,7 @@ Stremio 5 (Windows) için: Torrentio sonuçlarını cihaza indirip internetsiz i
 | 5 | Android aktarımı (yerel ağ, telefona indirme) | Sonnet |
 | 6 | Paylaşım paketi ve kılavuz | Sonnet |
 
-Faz 3 doğrulandıktan sonra durulur ve kullanıcıya gösterilir; Faz 4 ve sonrası onun onayıyla başlar.
+Faz 3 doğrulandı ve kullanıcıya gösterildi; Faz 4 (kalıcı kurulum) onayıyla yapıldı. Faz 5 ve sonrası onun onayıyla başlar.
 
 ## Faz kapsamları (ajan görev tanımı için)
 

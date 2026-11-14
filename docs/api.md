@@ -147,11 +147,12 @@ Notlar:
 
 ## İndirme Merkezi arayüzü (Faz 2)
 
-Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`index.html`, `stil.css`, `app.js`), `/ui/<dosya>` adresinden okunur. Çatı kütüphane ve derleme adımı yok. Ekranlar adres parçasıyla (`#`) açılır:
+Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`index.html`, `stil.css`, `yardimci.js`, `app.js`; `yardimci.js` saf yardımcılardır: kalite grupları, hata/silme metni), `/ui/<dosya>` adresinden okunur. Çatı kütüphane ve derleme adımı yok. Ekranlar adres parçasıyla (`#`) açılır:
 
 | Adres | Ekran |
 |---|---|
 | `/#/` | İndirmeler / İndirilenler (özet şeridi, kartlar, duraklat/sürdür/iptal/sil/oynat) |
+| `/#/indirilenler` | Aynı liste, başlığı "İndirilenler"; Stremio'nun gezinme çubuğundaki giriş ve film sayfasındaki "İndirildi/İniyor" düğmesi bunu açar |
 | `/#/ara`, `/#/ara/<söz>` | Başlık arama |
 | `/#/dizi/<tt…>` | Dizinin sezon listesi |
 | `/#/surum/movie/<tt…>`, `/#/surum/series/<tt…:sezon:bölüm>` | Sürüm seçici (film ya da tek bölüm) |
