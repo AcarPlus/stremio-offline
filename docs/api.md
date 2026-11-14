@@ -37,6 +37,7 @@ Genel kurallar:
   "priority": false,                      // öncelikli mi (en çok bir öğe; kalıcı)
   "effectiveLimit": 200000,               // şu an uygulanan sınır (öncelik kısması dahil), bayt/sn
   "throttled": true,                      // başka bir indirmenin önceliği yüzünden kısıldı
+  "playing": false,                       // bu indirmeden akış (oynatma) sunuluyor: kısma ve kayıtlı sınır askıda (effectiveLimit 0)
   "source": { "title": "...", "quality": "720p", "sizeGB": 0.14, "seeders": 23, "site": "YTS", "languages": ["gb"] },
   "poster": "http://127.0.0.1:11480/img/tt1727587-poster",   // yerelde yoksa ""
   "playUrl": "http://127.0.0.1:11480/play/movie/tt1727587/<infoHash>/5",
@@ -103,6 +104,7 @@ Birim **bayt/sn**, `0` = sınırsız, en çok 4294967295. Geçersiz değer `400`
   - `uploadLimit`: yükleme sınırı; her süreç için ayrı uygulanır (N etkin indirme ≈ N × sınır). Bitmiş indirme zaten yükleme yapmaz (süreci kapatılır).
   - Kalıcı: `data/ayarlar.json`. İlk değerler `config.json` (`downloadLimit`, `uploadLimit`) ya da `OFFLINE_RATELIMIT_DOWN`/`OFFLINE_RATELIMIT_UP`'tan gelir; arayüzden değiştirilen değer sonra geçerlidir.
 - `POST /api/items/:id/priority` gövde `{ "priority": true | false }` → öğe. **Öncelik**: aynı anda en çok bir öğe öncelikli olur (yenisi verilince önceki kalkar). Öncelikli öğe etkinken (`resolving`/`downloading`) diğer etkin indirmelerin etkin sınırı `min(kayıtlı sınır, priorityThrottle)` olur; durmazlar, kayıtlı `downloadLimit` değişmez (`throttled`, `effectiveLimit` alanları gösterir). Öncelikli öğe duraklatılınca, bitince, silinince ya da öncelik kaldırılınca diğerleri kendi sınırlarına döner (duraklatmada işaret kalır, sürdürülünce kısma yeniden başlar; bitince/silinince işaret kalkar). Tamamlanmış öğeye `409`. Kalıcıdır.
+- **Oynatma muafiyeti:** `/play/...` ile bir indirmeden **akış** (stream/Range) sunulurken o indirme hem öncelik kısmasından hem kendi kayıtlı sınırından muaftır: etkin sınır sınırsızdır (`playing: true`, `effectiveLimit: 0`, `throttled: false`). Muafiyet açık akış bağlantısı sayısına bağlıdır (uzun Range isteği sürerken sürer) ve son bağlantı kapandıktan 30 sn sonra kalkar (`playGraceMs` / `OFFLINE_PLAY_GRACE_MS`); sınırlar eski hesabına döner, kayıtlı `downloadLimit` hiç değişmez. Oynatılan öğe başkasını kısmaz (öncelik işareti değişmez). Yükleme sınırına dokunulmaz. Diskten sunulan (tamamlanmış) dosyada motor olmadığı için etkisi yoktur.
 - `POST /api/settings` `{ "priorityThrottle": 200000 }`: kısma hızı (vars. 200 KB/sn; `0` = öncelik kimseyi kısmaz), kalıcı, çalışan süreçlere hemen uygulanır.
 - `GET /api/engines` (tanı) → `{ control: { apiPort, pid, ready }, engines: [{ infoHash, slot, apiPort, peerPort, pid, ready, restarts, limits }] }`.
 

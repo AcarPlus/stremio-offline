@@ -404,7 +404,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       })
       sinirSatiri.hidden = done // bitmiş indirmenin süreci yok, sınır anlamsız
       sinir.set(it.downloadLimit ?? 0)
-      upd('kisildi', it.throttled ? 'Öncelik nedeniyle kısıldı: ' + fmtLimit(it.effectiveLimit) : '', t => { kisildi.textContent = t; kisildi.hidden = !t })
+      upd('kisildi', it.playing ? 'Oynatılıyor: sınır askıda' : (it.throttled ? 'Öncelik nedeniyle kısıldı: ' + fmtLimit(it.effectiveLimit) : ''), t => { kisildi.textContent = t; kisildi.hidden = !t })
       btn.oncelik.hidden = done
       upd('oncelik', !!it.priority, on => {
         btn.oncelik.setAttribute('aria-pressed', String(on))
