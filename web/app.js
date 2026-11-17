@@ -409,10 +409,12 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       sinir.set(it.downloadLimit ?? 0)
       upd('kisildi', it.playing ? 'Oynatılıyor: sınır askıda' : (it.throttled ? 'Öncelik nedeniyle kısıldı: ' + fmtLimit(it.effectiveLimit) : (it.priorityIdle ? 'Öncelikli, ama veri almıyor: diğerleri kısılmıyor' : '')), t => { kisildi.textContent = t; kisildi.hidden = !t })
       btn.oncelik.hidden = done
-      upd('oncelik', !!it.priority, on => {
+      upd('oncelik', (it.priority ? 1 : 0) + ':' + (it.state === 'paused' ? 'd' : ''), k => {
+        const on = k[0] === '1'; const dur = k.endsWith('d')
         btn.oncelik.setAttribute('aria-pressed', String(on))
         btn.oncelik.textContent = on ? '★ Öncelikli' : '☆ Öncelik'
-        btn.oncelik.title = on ? 'Önceliği kaldır: diğer indirmeler kendi sınırlarına döner' : 'Öncelikli yap: bu indirme tam hızda sürer, diğer etkin indirmeler yavaşlar'
+        btn.oncelik.title = (on ? 'Önceliği kaldır: diğer indirmeler kendi sınırlarına döner' : 'Öncelikli yap: bu indirme tam hızda sürer, diğer etkin indirmeler yavaşlar') +
+          (dur ? ' (duraklatılmış: etkisi indirme sürdürülünce başlar)' : '')
       })
       el.classList.toggle('oncelikli', !!it.priority && !done)
       btn.oynat.hidden = !(done || it.state === 'downloading')

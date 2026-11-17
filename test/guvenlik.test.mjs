@@ -7,6 +7,8 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { startService, serviceConfig, cleanService, killAll, RQBIT, rqbitArgs, TEST_DIR, sleep, waitFor, PORTS } from './harness.mjs'
 import { Engine } from '../lib/engine.mjs'
+import { EnginePool } from '../lib/pool.mjs'
+import { PORT_BASE } from './harness.mjs'
 
 /** Ham istek: Host/Origin başlıklarını ve gövdeyi tam denetlemek için http.request. */
 function raw (svc, method, path, { headers = {}, body } = {}) {
@@ -103,5 +105,36 @@ describe('K8: killStale yalnızca kendi rqbit sürecini kapatır', () => {
       await waitFor(() => !alive(ours.pid), { timeout: 5000, what: 'kendi rqbit kapandı' })
       assert.ok(alive(other.pid))
     } finally { other.kill(); ours.kill() }
+  })
+})
+
+describe('H6: EnginePool.sweep yuva klasörlerindeki pid dosyalarını süpürür', () => {
+  const dir = path.join(TEST_DIR, 'h6')
+  const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
+  after(() => { killAll(); fs.rmSync(dir, { recursive: true, force: true }) })
+
+  test('bizim kapımızdaki rqbit kapanır; başka kapıdaki rqbit, kukla süreç ve geçersiz klasör adı dokunulmadan kalır', async () => {
+    const apiBase = PORT_BASE + 5 // yuva 3 -> kapı PORT_BASE+8
+    const cfg = { rqbitDir: dir, rqbitExe: RQBIT, downloadDir: dir, rqbitApiPort: PORTS.k8, rqbitPeerPort: PORTS.k8 + 1, engineApiPortBase: apiBase, enginePeerPortBase: PORT_BASE + 6, port: 1, debugPort: 2 }
+    const motorlar = path.join(dir, 'motorlar')
+    const pidDosya = (k, pid, apiPort) => { fs.mkdirSync(path.join(motorlar, String(k)), { recursive: true }); const f = path.join(motorlar, String(k), 'rqbit.pid'); fs.writeFileSync(f, JSON.stringify({ pid, apiPort })); return f }
+    const ours = spawn(RQBIT, rqbitArgs({ api: apiBase + 3, port: PORT_BASE + 9, out: path.join(dir, 'a') }), { stdio: 'ignore', windowsHide: true })
+    const other = spawn(RQBIT, rqbitArgs({ api: PORTS.k8 + 2, port: PORTS.k8 + 3, out: path.join(dir, 'b') }), { stdio: 'ignore', windowsHide: true })
+    const kukla = spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)'], { stdio: 'ignore', windowsHide: true })
+    try {
+      fs.mkdirSync(path.join(dir, 'a'), { recursive: true }); fs.mkdirSync(path.join(dir, 'b'), { recursive: true })
+      await sleep(1500)
+      const fOurs = pidDosya(3, ours.pid, apiBase + 3)
+      const fOther = pidDosya(5, other.pid, apiBase + 5) // pid başkasının rqbit'i ama kayıtlı kapı bizim değil
+      const fKukla = pidDosya(4, kukla.pid, apiBase + 4)
+      fs.mkdirSync(path.join(motorlar, 'abc'), { recursive: true }); fs.writeFileSync(path.join(motorlar, 'abc', 'rqbit.pid'), JSON.stringify({ pid: kukla.pid, apiPort: 1 }))
+      const pool = new EnginePool(cfg, { limitsFor: () => ({ down: 0, up: 0 }), controlLimits: () => ({ down: 0, up: 0 }), slotsInUse: () => new Set() })
+      pool.sweep()
+      await waitFor(() => !alive(ours.pid), { timeout: 5000, what: 'kendi motor süreci kapandı' })
+      assert.ok(alive(other.pid), 'başka kapıdaki rqbit yaşıyor')
+      assert.ok(alive(kukla.pid), 'kukla süreç yaşıyor')
+      for (const f of [fOurs, fOther, fKukla]) assert.ok(!fs.existsSync(f), 'pid dosyası silindi: ' + f)
+      assert.ok(fs.existsSync(path.join(motorlar, 'abc', 'rqbit.pid')), 'sayı olmayan klasöre dokunulmadı')
+    } finally { for (const p of [ours, other, kukla]) { try { p.kill() } catch {} } }
   })
 })

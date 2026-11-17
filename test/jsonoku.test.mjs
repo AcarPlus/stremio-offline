@@ -48,8 +48,14 @@ test('H5: dosya yoksa sessiz, yedek yok', () => {
 
 function withEnv (dir, fn) {
   const old = process.env.OFFLINE_DATA_DIR
+  const kapilar = { OFFLINE_PORT: '39001', OFFLINE_RQBIT_PORT: '39002', OFFLINE_PEER_PORT: '39003', OFFLINE_ENGINE_API_BASE: '39010', OFFLINE_ENGINE_PEER_BASE: '39110' }
+  const eski = Object.fromEntries(Object.keys(kapilar).map(k => [k, process.env[k]]))
   process.env.OFFLINE_DATA_DIR = dir
-  try { return fn() } finally { if (old === undefined) delete process.env.OFFLINE_DATA_DIR; else process.env.OFFLINE_DATA_DIR = old }
+  Object.assign(process.env, kapilar)
+  try { return fn() } finally {
+    if (old === undefined) delete process.env.OFFLINE_DATA_DIR; else process.env.OFFLINE_DATA_DIR = old
+    for (const [k, v] of Object.entries(eski)) if (v === undefined) delete process.env[k]; else process.env[k] = v
+  }
 }
 
 test('E10: BOM\'lu config.json okunur', () => {
@@ -82,4 +88,24 @@ test('BOM\'lu library.json okunur', () => {
     assert.equal(lib.all().length, 1)
     assert.equal(yedekler(dir, 'library.json').length, 0)
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('H7: sınama kipi kapılar verilmeden açılmaz (gerçek servisin aralığına girmez)', () => {
+  const dir = tmp()
+  const keys = ['OFFLINE_PORT', 'OFFLINE_RQBIT_PORT', 'OFFLINE_PEER_PORT', 'OFFLINE_ENGINE_API_BASE', 'OFFLINE_ENGINE_PEER_BASE', 'OFFLINE_DEBUG_PORT', 'OFFLINE_NO_INJECT']
+  const eski = Object.fromEntries(keys.map(k => [k, process.env[k]]))
+  for (const k of keys) delete process.env[k]
+  process.env.OFFLINE_DATA_DIR = dir
+  try {
+    assert.throws(() => loadConfig(), /OFFLINE_RQBIT_PORT.*OFFLINE_ENGINE_API_BASE/)
+    Object.assign(process.env, { OFFLINE_PORT: '39001', OFFLINE_RQBIT_PORT: '39002', OFFLINE_PEER_PORT: '39003', OFFLINE_ENGINE_API_BASE: '39010', OFFLINE_ENGINE_PEER_BASE: '39110' })
+    assert.equal(loadConfig().inject, false, 'sınama kipinde Stremio kapısına gidilmez')
+    process.env.OFFLINE_DEBUG_PORT = '39004'
+    const c = loadConfig()
+    assert.equal(c.inject, true); assert.equal(c.debugPort, 39004)
+  } finally {
+    delete process.env.OFFLINE_DATA_DIR
+    for (const [k, v] of Object.entries(eski)) if (v === undefined) delete process.env[k]; else process.env[k] = v
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })
