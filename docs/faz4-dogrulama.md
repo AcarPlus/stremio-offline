@@ -52,3 +52,9 @@ Sınama sırasında kullanıcının gerçek servis günlüğünde 11:33 ve 11:35
 2. Eski servisi kapat: yalnız 11480'i dinleyen node sürecini öldür (ör. `Stop-Process -Id (Get-NetTCPConnection -State Listen -LocalPort 11480).OwningProcess`); ada göre toplu kapatma yapma. Açık `baslat.cmd` penceresi varsa kapat.
 3. Yeni servisi başlat: Başlat menüsündeki "Stremio Offline" kısayolu (servisi gizli başlatır).
 4. Açık Stremio'daki eski betik yüzünden "İndirilenler" girişi için Stremio'yu kapatıp aynı kısayolla aç (ya da sayfayı yenile); ondan sonra servis her yeniden başlayışında betik kendiliğinden güncellenir.
+
+## Düzeltme durumu (dal duzeltme-h5-e)
+
+- E1: düzeltildi (`durdur-servis.ps1`, `POST /api/kapat`). E2: varsayılan düğme Hayır, pencere önde (görsel olarak denenmedi). E4: `data/baslatici.log`. E5: tam yol eşleşmesi.
+- E6: düzeltildi. E7: film düğmesi "Yarım kaldı". E9: kütüphane/motor kapı alındıktan sonra kurulur; kapı başka uygulamadaysa açık mesaj ve çıkış kodu 1. E10: BOM tolere edilir, bozuk config.json ezilmez.
+- Atlandı: E3 (damgasız eski betik; belgeli, yalnız Stremio sayfası yenilenince çözülür), E8 (pencereyi öne getirme/çalışma klasörü: gerçek Stremio'ya dokunmadan sınanamaz), I1, I2.

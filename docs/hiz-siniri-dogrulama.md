@@ -55,3 +55,10 @@ Gerçek veriyle yeni sürüme geçmek, aşağıdaki önlemlerle güvenli görün
 ## Yeniden üretme için kısa not
 
 Betikler repoya konmadı. Yöntem: `test/fixture.mjs` ile fixture üret (`OFFLINE_TEST_DIR` ile ayrı klasör), `bin/rqbit.exe`'yi tohumlayıcı olarak ayrı kapıda başlat (`--disable-dht --disable-trackers --disable-lsd --listen-ip 127.0.0.1`), `server.mjs`'yi `OFFLINE_DATA_DIR`, `OFFLINE_DOWNLOAD_DIR`, `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT`, `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE`, `OFFLINE_LOOPBACK=1`, `OFFLINE_NO_INJECT=1`, `OFFLINE_EXTRA_PEERS=<tohumlayıcı>` ile başlat. Hız ölçümü `GET /api/items/<ih>` içindeki `doneBytes` farkından; motor sınırı `GET /api/engines` ile bulunan kapıdaki `GET /torrents/limits`'ten.
+
+## Düzeltme durumu (dal duzeltme-h5-e)
+
+- H5: düzeltildi (`lib/jsonoku.mjs`; BOM tolere edilir, bozuk dosya günlüğe yazılır ve `.bozuk-<zaman>` yedeklenir; `test/jsonoku.test.mjs`).
+- H6: `EnginePool.sweep` için yuva klasörü + kukla süreç sınaması eklendi (`test/guvenlik.test.mjs`). `cekirdek.test` "yetim kalan" assertion'ı Windows'ta hâlâ boş geçer (iş nesnesi); değiştirilmedi.
+- H7: düzeltildi; sınama kipinde (`OFFLINE_DATA_DIR`) `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT`, `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE` zorunlu, Stremio'ya düğme ekleme yalnız `OFFLINE_DEBUG_PORT` verilirse açılır.
+- H8: (a) belge ve (e) ipucu düzeltildi; (b), (c), (d) önceki commit'lerde zaten giderilmişti.

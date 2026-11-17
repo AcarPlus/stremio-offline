@@ -158,6 +158,7 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - `HEAD` desteklenir; aralık dışı `416`. Yanıtta `Accept-Ranges: bytes`, `Content-Type` uzantıya göre.
 
 ### Eski uçlar (inject.js ve eski panel için korunur)
+- `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
 - `POST /api/download` gövde `{ type, id, infoHash, fileIdx, trackers, title, fileName }` → `{ ok, state, message, item }`. Zaten varsa: tamamlandıysa "Zaten indirilmiş", duraklatılmış/hatalıysa sürdürür, iniyorsa "Zaten iniyor (%x)".
 - `POST /api/auto` gövde `{ type, id }` → ayarlardaki kalite/boyut sınırına uyan en çok kaynaklı sürümü ekler. Aynı içerik varsa yukarıdaki gibi davranır.
 - `GET /api/library` → `{ downloadDir, items: [öğe, …] }`.
