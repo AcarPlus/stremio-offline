@@ -5,6 +5,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import http from 'node:http'
 import { startService, serviceConfig, cleanService, killAll, ROOT } from './harness.mjs'
 
 describe('ikinci servis örneği', () => {
@@ -50,5 +51,29 @@ describe('kur.ps1 / kaldir.ps1', { skip: process.platform !== 'win32' }, () => {
     const k2 = ps('kaldir.ps1')
     assert.equal(k2.status, 0, k2.stderr || k2.stdout)
     for (const [k, f] of Object.entries(files)) assert.ok(!fs.existsSync(path.join(dirs[k], f)), 'silindi: ' + f)
+  })
+})
+
+describe('E9: kapı başka bir uygulamada', () => {
+  const sc = serviceConfig(98)
+  let tutucu
+  before(async () => {
+    cleanService(sc)
+    tutucu = http.createServer((q, r) => r.end('baska uygulama')) // /manifest.json bizim eklentiye benzemez
+    await new Promise(resolve => tutucu.listen(sc.port, '127.0.0.1', resolve))
+  })
+  after(async () => { await new Promise(resolve => tutucu.close(resolve)); killAll(); cleanService(sc) })
+
+  test('servis hata koduyla çıkar, kütüphaneye ve motora dokunmaz, günlük doğruyu söyler', async () => {
+    const out = []
+    const p = spawn(process.execPath, [path.join(ROOT, 'server.mjs')], { cwd: ROOT, env: { ...process.env, ...sc.env }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    p.stdout.on('data', d => out.push(String(d))); p.stderr.on('data', d => out.push(String(d)))
+    const code = await new Promise(resolve => { p.on('exit', resolve); setTimeout(() => { try { p.kill() } catch {} }, 20000) })
+    assert.equal(code, 1)
+    assert.ok(!fs.existsSync(path.join(sc.dataDir, 'library.json')), 'library.json oluşturulmadı/yazılmadı')
+    assert.ok(!fs.existsSync(path.join(sc.dataDir, 'rqbit', 'rqbit.pid')), 'motor başlatılmadı')
+    const metin = out.join('')
+    assert.match(metin, /başka bir uygulama/)
+    assert.doesNotMatch(metin, /servis zaten çalışıyor/)
   })
 })

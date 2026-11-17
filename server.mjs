@@ -41,21 +41,25 @@ async function alreadyRunning (c) {
 if (await alreadyRunning(cfg)) process.exit(0)
 
 setLogFile(path.join(cfg.dataDir, 'servis.log'))
-const library = new Library(cfg.libFile).load()
-// Tek motorlu eski düzenden geçiş (bir kez; eski oturum klasörü yedeklenir, silinmez)
-try { migrateSession(cfg, library) } catch (e) { log('geçiş hatası:', e.message) }
-const settings = new Settings(cfg)
-const meta = new MetaStore(cfg)
-let manager = null
-const pool = new EnginePool(cfg, {
-  limitsFor: ih => manager.limitsFor(ih),
-  controlLimits: () => ({ down: 0, up: settings.get().uploadLimit }),
-  slotsInUse: () => new Set(library.all().map(i => i.slot).filter(Number.isInteger))
-})
-manager = new Manager({ cfg, pool, library, meta, settings })
-const torrentio = new Torrentio(cfg, meta)
-const addon = new Addon({ cfg, manager, torrentio, meta })
-const api = new Api({ cfg, manager, torrentio })
+// Kütüphane, ayarlar, motor havuzu ve yöneticiler kapı alındıktan SONRA kurulur (init, listen geri çağrısında):
+// yarışı kaybeden örnek, kazananın dosyalarına (library.json, pid dosyaları) hiç dokunmadan çıkar (E9).
+let library, settings, meta, manager, pool, torrentio, addon, api
+function init () {
+  library = new Library(cfg.libFile).load()
+  // Tek motorlu eski düzenden geçiş (bir kez; eski oturum klasörü yedeklenir, silinmez)
+  try { migrateSession(cfg, library) } catch (e) { log('geçiş hatası:', e.message) }
+  settings = new Settings(cfg)
+  meta = new MetaStore(cfg)
+  pool = new EnginePool(cfg, {
+    limitsFor: ih => manager.limitsFor(ih),
+    controlLimits: () => ({ down: 0, up: settings.get().uploadLimit }),
+    slotsInUse: () => new Set(library.all().map(i => i.slot).filter(Number.isInteger))
+  })
+  manager = new Manager({ cfg, pool, library, meta, settings })
+  torrentio = new Torrentio(cfg, meta)
+  addon = new Addon({ cfg, manager, torrentio, meta })
+  api = new Api({ cfg, manager, torrentio })
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -158,11 +162,14 @@ const server = http.createServer((req, res) => {
   })
 })
 
-server.on('error', e => {
+server.on('error', async e => {
   if (e.code === 'EADDRINUSE') {
-    // Yarış: iki örnek aynı anda başladı. Diğeri çalışıyor; motora dokunmadan sessizce çık.
-    log(`Port ${cfg.port} kullanımda — servis zaten çalışıyor, bu örnek çıkıyor.`)
-    process.exit(0)
+    // Yarış: iki örnek aynı anda başladı. Diğeri çalışıyorsa motora dokunmadan sessizce çık;
+    // kapıyı başka bir uygulama tutuyorsa bunu açıkça yaz (yanıltıcı "servis zaten çalışıyor" yazma).
+    const ours = await alreadyRunning(cfg) || (await new Promise(r => setTimeout(r, 700)), await alreadyRunning(cfg))
+    if (ours) { log(`Port ${cfg.port} kullanımda — servis zaten çalışıyor, bu örnek çıkıyor.`); process.exit(0) }
+    log(`Port ${cfg.port} başka bir uygulama tarafından kullanılıyor; servis başlatılamadı. config.json'daki "port" değerini değiştir.`)
+    process.exit(1)
   }
   log('sunucu hatası: ' + e.message)
   shutdown(1)
@@ -173,6 +180,7 @@ server.listen(cfg.port, '127.0.0.1', () => {
   log(`Offline İndir çalışıyor → ${cfg.base}`)
   log(`İndirme klasörü: ${cfg.downloadDir}`)
   if (cfg.testMode) log('Sınama kipi: veri klasörü', cfg.dataDir)
+  init()
   manager.start()
   // Önce eski süreçler (pid kaydından) kapatılır, sonra kontrol motoru ve inmekte olan öğelerin motorları başlar.
   pool.start().catch(e => log('motor başlatılamadı:', e.message))
