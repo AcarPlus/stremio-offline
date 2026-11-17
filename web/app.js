@@ -128,7 +128,7 @@ function onayla ({ baslik, metin, tamam = 'Tamam', tik = null }) {
   })
 }
 
-const { qualityGroup, qualityRank: QUALITY_RANK, qualityLabel, compareQuality, errorText, deleteText } = OfflineYardimci // web/yardimci.js
+const { qualityGroup, qualityRank: QUALITY_RANK, qualityLabel, compareQuality, errorText, deleteText, pickOption, qualityGroups } = OfflineYardimci // web/yardimci.js
 const LANG = { gb: 'İngilizce', us: 'İngilizce', tr: 'Türkçe', ru: 'Rusça', ua: 'Ukraynaca', fr: 'Fransızca', de: 'Almanca', es: 'İspanyolca', mx: 'İspanyolca', it: 'İtalyanca', pt: 'Portekizce', br: 'Portekizce', jp: 'Japonca', kr: 'Korece', cn: 'Çince', pl: 'Lehçe', nl: 'Felemenkçe', se: 'İsveççe', gr: 'Yunanca', in: 'Hintçe', sa: 'Arapça', cz: 'Çekçe', hu: 'Macarca', ro: 'Romence', th: 'Tayca' }
 const langName = c => LANG[c] || c.toUpperCase()
 const STATE_TR = { resolving: 'Bilgi alınıyor', downloading: 'İniyor', paused: 'Duraklatıldı', completed: 'Hazır', error: 'Hata' }
@@ -814,14 +814,7 @@ async function viewSezon (root, imdb, seasonStr, current) {
     }
 
     // ── bölüm bölüm kipi
-    const pick = (opts, q) => {
-      if (!opts.length) return -1
-      const good = opts.map((o, i) => [o, i]).filter(([o]) => o.seeders > 0)
-      const pool = good.length ? good : opts.map((o, i) => [o, i])
-      if (q !== 'auto') { const m = pool.find(([o]) => o.quality === q); if (m) return m[1] }
-      else { const m = pool.find(([o]) => o.quality === '1080p') || pool.find(([o]) => o.quality === '720p'); if (m) return m[1] }
-      return pool[0][1]
-    }
+    const pick = pickOption // kalite grupla eşlenir (E6); yardimci.js
     function kurSatirlar () {
       for (const e of data.episodes) {
         const opts = e.options || []
@@ -831,12 +824,12 @@ async function viewSezon (root, imdb, seasonStr, current) {
       }
     }
     kurSatirlar()
-    const qualities = [...new Set(data.episodes.flatMap(e => (e.options || []).map(o => o.quality)).filter(Boolean))].sort((a, b) => QUALITY_RANK(b) - QUALITY_RANK(a))
+    const qualities = qualityGroups(data.episodes.flatMap(e => e.options || []))
     const optText = o => `${qualityLabel(o.quality)} · ${o.sizeGB ? o.sizeGB.toFixed(2) + ' GB' : '? GB'} · ${o.seeders} kaynak · ${o.source || '—'}${(o.languages || []).length ? ' · ' + o.languages.map(langName).slice(0, 2).join('/') : ''}`
 
     function cizBolum () {
       if (!data.episodes.length) { icerik.append(h('div', { class: 'bos-liste' }, 'Bu sezonun bölüm listesi alınamadı.')); return }
-      const qSel = h('select', { 'aria-label': 'Tercih edilen kalite' }, h('option', { value: 'auto' }, 'Otomatik (1080p / en çok kaynak)'), qualities.map(q => h('option', { value: q, selected: st.q === q }, q)))
+      const qSel = h('select', { 'aria-label': 'Tercih edilen kalite' }, h('option', { value: 'auto' }, 'Otomatik (1080p / en çok kaynak)'), qualities.map(q => h('option', { value: q, selected: st.q === q }, q === '?' ? 'Bilinmeyen' : qualityLabel(q))))
       qSel.addEventListener('change', () => { st.q = qSel.value; for (const r of st.rows.values()) r.sel = pick(r.opts, st.q); ciz() })
       const topla = on => { for (const r of st.rows.values()) r.on = on && r.opts.length > 0 && !(have.get(r.e.id)?.complete); ciz() }
       const kutu = h('div', { class: 'bolumler' })
