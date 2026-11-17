@@ -76,16 +76,17 @@
       const map = new Map()
       const entry = (imdbId, type) => {
         let e = map.get(imdbId)
-        if (!e) map.set(imdbId, e = { imdbId, type: type || null, done: 0, active: 0, doneBytes: 0, sizeBytes: 0, play: null })
+        if (!e) map.set(imdbId, e = { imdbId, type: type || null, done: 0, active: 0, partial: 0, doneBytes: 0, sizeBytes: 0, play: null })
         if (!e.type && type) e.type = type
         return e
       }
       for (const it of items || []) {
         if (!it) continue
         const activeState = it.state === 'downloading' || it.state === 'resolving'
+        const partialState = it.state === 'paused' || it.state === 'error' // kısmen inmiş / yarım kalmış (E7)
         const files = (it.files || []).filter(f => f && f.selected)
         if (!files.length) {
-          if (activeState && /^tt\d+$/.test(it.imdbId || '')) entry(it.imdbId, it.type).active++
+          if ((activeState || partialState) && /^tt\d+$/.test(it.imdbId || '')) entry(it.imdbId, it.type)[activeState ? 'active' : 'partial']++
           continue
         }
         for (const f of files) {
@@ -106,7 +107,7 @@
             e.active++
             e.doneBytes += f.doneBytes || 0
             e.sizeBytes += f.length || 0
-          }
+          } else if (partialState) e.partial++
         }
       }
       return map
@@ -123,12 +124,13 @@
       return null
     }
 
-    /** Film sayfasındaki "İndir" düğmesinin durumu: { state: 'none' | 'active' | 'done', text, title }. */
+    /** Film sayfasındaki "İndir" düğmesinin durumu: { state: 'none' | 'active' | 'partial' | 'done', text, title }. */
     function downloadButton (e, type) {
       if (type !== 'movie') return { state: 'none', text: '⬇ Sezonu indir', title: 'Sezonu ya da bölümleri cihaza indir (Offline İndir)' }
       const b = badgeInfo(e)
       if (b && b.kind === 'done') return { state: 'done', text: '✓ İndirildi', title: 'Cihaza indirildi; İndirilenler’i aç (Offline İndir)' }
       if (b && b.kind === 'active') return { state: 'active', text: b.text, title: 'Cihaza iniyor; İndirilenler’i aç (Offline İndir)' }
+      if (e && e.partial > 0) return { state: 'partial', text: '⏸ Yarım kaldı', title: 'İndirme duraklatılmış ya da yarım kalmış; İndirilenler’i aç ve sürdür (Offline İndir)' }
       return { state: 'none', text: '⬇ İndir', title: 'Sürüm seç ve cihaza indir (Offline İndir)' }
     }
 
