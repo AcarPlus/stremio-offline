@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
-import { startService, serviceConfig, cleanService, killAll, ROOT } from './harness.mjs'
+import { startService, serviceConfig, cleanService, killAll, ROOT, RQBIT, waitFor } from './harness.mjs'
 
 describe('ikinci servis örneği', () => {
   const sc = serviceConfig(96)
@@ -75,5 +75,54 @@ describe('E9: kapı başka bir uygulamada', () => {
     const metin = out.join('')
     assert.match(metin, /başka bir uygulama/)
     assert.doesNotMatch(metin, /servis zaten çalışıyor/)
+  })
+})
+
+describe('E1: durdur-servis.ps1', { skip: process.platform !== 'win32' }, () => {
+  const sc = serviceConfig(99)
+  const env = { ...process.env, ...sc.env, OFFLINE_RQBIT_EXE: RQBIT }
+  const durdur = (...args) => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'durdur-servis.ps1'), '-Port', String(sc.port), ...args], { encoding: 'utf8', timeout: 90000, env })
+  const up = async () => { try { return (await fetch(`http://127.0.0.1:${sc.port}/manifest.json`, { signal: AbortSignal.timeout(1500) })).ok } catch { return false } }
+  const rqbitUp = async () => { try { await fetch(`http://127.0.0.1:${sc.rqbitPort}/`, { signal: AbortSignal.timeout(1000) }); return true } catch { return false } }
+  after(() => { durdur(); killAll(); cleanService(sc) })
+
+  test('çalışan servisi temiz durdurur (servis ve rqbit kapanır, pid dosyası kalmaz)', async () => {
+    cleanService(sc)
+    const svc = await startService(sc)
+    assert.ok(await up() && await rqbitUp())
+    const r = durdur()
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    assert.match(r.stdout, /durduruldu/)
+    assert.ok(!(await up()), 'servis kapandı')
+    await waitFor(async () => !(await rqbitUp()), { timeout: 10000, what: 'rqbit kapandı' })
+    assert.ok(!fs.existsSync(path.join(sc.dataDir, 'rqbit', 'rqbit.pid')), 'pid dosyası temizlendi')
+    assert.ok(svc.proc.exitCode !== null || svc.proc.killed || svc.proc.signalCode, 'servis süreci bitti')
+  })
+
+  test('kapıyı başka bir uygulama tutuyorsa dokunmaz', async () => {
+    const tutucu = http.createServer((q, r) => r.end('{"id":"baska"}'))
+    await new Promise(resolve => tutucu.listen(sc.port, '127.0.0.1', resolve))
+    try {
+      const r = durdur()
+      assert.equal(r.status, 1, r.stdout + r.stderr)
+      assert.match(r.stdout, /hicbir sey kapatilmadi/)
+      assert.ok(tutucu.listening, 'başka uygulama yaşıyor')
+    } finally { await new Promise(resolve => tutucu.close(resolve)) }
+  })
+
+  test('-Yeniden: durdurur ve gizli yeniden başlatır; servis yokken "çalışmıyor" der', async () => {
+    await startService(sc)
+    const r = durdur('-Yeniden')
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    assert.match(r.stdout, /yeniden baslatildi/)
+    assert.ok(await up(), 'yeni servis yanıt veriyor')
+    const durum = await (await fetch(`http://127.0.0.1:${sc.port}/api/status`)).json()
+    assert.ok(durum.downloadDir, 'API çalışıyor')
+    const r2 = durdur()
+    assert.equal(r2.status, 0, r2.stdout + r2.stderr)
+    assert.ok(!(await up()))
+    const r3 = durdur()
+    assert.equal(r3.status, 0)
+    assert.match(r3.stdout, /calismiyor/)
   })
 })

@@ -110,6 +110,15 @@ async function handle (req, res) {
       res.setHeader('Access-Control-Allow-Private-Network', 'true')
       if (req.method === 'OPTIONS') return res.writeHead(204).end()
     }
+    // Temiz durdurma (durdur-servis.ps1): yalnızca servisin kendi sayfasından / kaynaksız yerel istekten (Stremio kökeni değil)
+    if (parts[1] === 'kapat' && parts.length === 2) {
+      if (req.method !== 'POST') return json(res, 405, { err: 'POST gerekli' })
+      if (!own) return json(res, 403, { err: 'yasak' })
+      json(res, 200, { ok: true })
+      log('kapatma isteği alındı (/api/kapat)')
+      setTimeout(() => shutdown(0), 100)
+      return
+    }
     try {
       const [code, body] = await api.handle(req, parts, url)
       return json(res, code, body)
