@@ -12,8 +12,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 
-$node = (Get-Command node -ErrorAction SilentlyContinue).Source
-if (-not $node) { throw 'Node.js bulunamadı (node komutu PATH içinde olmalı).' }
+# Önce paketle gelen taşınabilir Node (node\node.exe), yoksa PATH'teki node.
+$yerelNode = Join-Path $root 'node\node.exe'
+$node = if (Test-Path $yerelNode) { $yerelNode } else { (Get-Command node -ErrorAction SilentlyContinue).Source }
+if (-not $node) { throw 'Node.js bulunamadı (node\node.exe yok ve node komutu PATH içinde değil).' }
 $wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
 $stremio = Join-Path $env:LOCALAPPDATA 'Programs\Stremio\stremio-shell-ng.exe'
 $simge = if (Test-Path $stremio) { "$stremio,0" } else { "$env:SystemRoot\System32\shell32.dll,175" }

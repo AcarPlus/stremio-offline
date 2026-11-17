@@ -26,7 +26,8 @@ function Show-Mesaj($metin, $dugmeler) {
 
 # 1) Servis (çalışıyorsa ikinci örnek zaten sessizce çıkar; yine de gereksiz başlatma yapma).
 if (-not (Test-Url "http://127.0.0.1:$port/manifest.json")) {
-    $node = if ($NodeYolu) { $NodeYolu } else { (Get-Command node -ErrorAction SilentlyContinue).Source }
+    $yerelNode = Join-Path $root 'node\node.exe'
+    $node = if ($NodeYolu -and (Test-Path $NodeYolu)) { $NodeYolu } elseif (Test-Path $yerelNode) { $yerelNode } else { (Get-Command node -ErrorAction SilentlyContinue).Source }
     if ($node) {
         Start-Process $node -ArgumentList 'server.mjs' -WorkingDirectory $root -WindowStyle Hidden
     } else {

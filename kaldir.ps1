@@ -32,5 +32,11 @@ if ($ServisiDurdur) {
         $dinliyor = Get-NetTCPConnection -LocalPort $kapi -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -eq $p.ProcessId }
         if ($dinliyor) { Stop-Process -Id $p.ProcessId; Write-Host "Servis durduruldu (pid $($p.ProcessId))." }
     }
+    # Servis zorla kapatılınca motor süreçleri açık kalır: yalnızca çalıştırılabilir yolu bu klasörün
+    # bin\rqbit.exe'si olanlar kapatılır (ada göre toplu kapatma yok).
+    $rqbit = Join-Path $root 'bin\rqbit.exe'
+    Get-CimInstance Win32_Process -Filter "Name='rqbit.exe'" |
+        Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $rqbit) } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; Write-Host "Motor durduruldu (pid $($_.ProcessId))." }
 }
 Write-Host 'Kaldırıldı. (Çalışan servis, -ServisiDurdur verilmedikçe açık kalır.)'
