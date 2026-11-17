@@ -126,3 +126,70 @@ describe('E1: durdur-servis.ps1', { skip: process.platform !== 'win32' }, () => 
     assert.match(r3.stdout, /calismiyor/)
   })
 })
+
+describe('E4: baslat-servis.vbs hataları günlüğe yazar', { skip: process.platform !== 'win32' }, () => {
+  const sc = serviceConfig(94)
+  const vbs = (...args) => spawnSync('wscript.exe', ['//B', '//Nologo', path.join(ROOT, 'baslat-servis.vbs'), ...args], { encoding: 'utf8', timeout: 30000, env: { ...process.env, OFFLINE_DATA_DIR: sc.dataDir } })
+  const logFile = path.join(sc.dataDir, 'baslatici.log')
+  before(() => { cleanService(sc); fs.mkdirSync(path.dirname(sc.dataDir), { recursive: true }) })
+  after(() => { killAll(); cleanService(sc) })
+
+  test('var olmayan node yolu: servis açılmaz ve nedeni günlükte yazar', () => {
+    const r = vbs(path.join(os.tmpdir(), 'yok-node', 'node.exe'))
+    assert.equal(r.status, 1)
+    const t = fs.readFileSync(logFile, 'utf8')
+    assert.match(t, /node bulunamadi/)
+    assert.match(t, /yok-node/)
+  })
+
+  test('servis açılışta çökerse (config hatası) hata günlüğe düşer', async () => {
+    // Açılışta çökme: sınama kipinde zorunlu kapı değişkenleri eksik (loadConfig hata fırlatır).
+    const env = { ...process.env, OFFLINE_DATA_DIR: sc.dataDir }
+    for (const k of ['OFFLINE_PORT', 'OFFLINE_RQBIT_PORT', 'OFFLINE_PEER_PORT', 'OFFLINE_ENGINE_API_BASE', 'OFFLINE_ENGINE_PEER_BASE']) delete env[k]
+    fs.rmSync(logFile, { force: true })
+    const r = spawnSync('wscript.exe', ['//B', '//Nologo', path.join(ROOT, 'baslat-servis.vbs'), process.execPath], { encoding: 'utf8', timeout: 30000, env })
+    assert.equal(r.status, 0)
+    await waitFor(() => fs.existsSync(logFile) && /OFFLINE_RQBIT_PORT/.test(fs.readFileSync(logFile, 'utf8')), { timeout: 15000, what: 'stderr günlüğe düştü' })
+    assert.match(fs.readFileSync(logFile, 'utf8'), /servis baslatiliyor/)
+  })
+})
+
+describe('E2/E4: stremio-baslat.ps1', { skip: process.platform !== 'win32' }, () => {
+  const sc = serviceConfig(93)
+  before(() => { cleanService(sc); fs.mkdirSync(sc.dataDir, { recursive: true }) })
+  after(() => cleanService(sc))
+
+  test('beklenmeyen hata sessiz kalmaz: günlüğe yazılır (pencere açılmaz)', () => {
+    // geçersiz OFFLINE_PORT -> [int] dönüşümü hata verir; hata bir iletişim kutusuna değil günlüğe gider
+    const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'stremio-baslat.ps1')],
+      { encoding: 'utf8', timeout: 60000, env: { ...process.env, OFFLINE_DATA_DIR: sc.dataDir, OFFLINE_PORT: 'abc' } })
+    assert.equal(r.status, 1, r.stdout + r.stderr)
+    assert.match(fs.readFileSync(path.join(sc.dataDir, 'baslatici.log'), 'utf8'), /HATA:/)
+  })
+
+  test('E2: "düğmesiz açık" sorusunda varsayılan düğme Hayır (Button2), pencere önde', () => {
+    const t = fs.readFileSync(path.join(ROOT, 'stremio-baslat.ps1'), 'utf8')
+    assert.match(t, /'YesNo' 'Button2'/)
+    assert.match(t, /TopMost = \$true/)
+  })
+})
+
+describe('E5: kaldir.ps1 eşleşme işlevi (Test-Bizim) saf olarak sınanır; kısayol oluşturulmaz/silinmez', { skip: process.platform !== 'win32' }, () => {
+  // İşlev kaldir.ps1'den çıkarılıp yalnızca dizgelerle çalıştırılır (kaldir.ps1'in kendisi çalıştırılmaz).
+  const src = fs.readFileSync(path.join(ROOT, 'kaldir.ps1'), 'utf8')
+  const fn = src.slice(src.indexOf('function Test-Bizim'), src.indexOf('function Remove-Kisayol'))
+  const dene = (root, arg) => {
+    const ps = `$root = $env:T_KOK\n${fn}\nif (Test-Bizim $env:T_ARG) { 'EVET' } else { 'HAYIR' }`
+    return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', timeout: 30000, env: { ...process.env, T_KOK: root, T_ARG: arg } }).stdout.trim()
+  }
+  const kok = path.win32.join('C:', 'Araclar', 'stremio-offline')
+
+  test('tam betik yolu eşleşir; önek çakışması ve başka dosya eşleşmez; harf farkı önemsiz', () => {
+    assert.equal(dene(kok, `//B //Nologo "${path.win32.join(kok, 'baslat-stremio.vbs')}" "${path.win32.join('C:', 'node.exe')}"`), 'EVET')
+    assert.equal(dene(kok, `//B //Nologo "${path.win32.join(kok, 'baslat-servis.vbs')}"`), 'EVET')
+    assert.equal(dene(kok, `//B //Nologo "${path.win32.join(kok.toUpperCase(), 'BASLAT-STREMIO.VBS')}" "${path.win32.join('C:', 'node.exe')}"`), 'EVET', 'büyük harfli yazım')
+    assert.equal(dene(kok, `//B //Nologo "${path.win32.join(kok + '-v2', 'baslat-stremio.vbs')}" "${path.win32.join('C:', 'node.exe')}"`), 'HAYIR', 'önek çakışması')
+    assert.equal(dene(kok, `//B //Nologo "${path.win32.join(kok, 'baska.vbs')}"`), 'HAYIR')
+    assert.equal(dene(kok, ''), 'HAYIR')
+  })
+})

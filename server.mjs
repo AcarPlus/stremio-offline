@@ -24,8 +24,9 @@ import { servePlay } from './lib/play.mjs'
 import { startInjector } from './lib/inject.mjs'
 
 // Yakalanmamış hata servisi kapatmaz: günlüğe yazılır, servis sürer.
-process.on('uncaughtException', e => log('yakalanmamış hata:', e))
-process.on('unhandledRejection', e => log('yakalanmamış ret:', e))
+// Ayrıca stderr'e de yazılır: başlatıcı (baslat-servis.vbs) stderr'i data\baslatici.log'a ekler, açılışta çökme görünür kalır (E4).
+process.on('uncaughtException', e => { log('yakalanmamış hata:', e); console.error('yakalanmamış hata:', e?.stack || e) })
+process.on('unhandledRejection', e => { log('yakalanmamış ret:', e); console.error('yakalanmamış ret:', e?.stack || e) })
 
 const cfg = loadConfig()
 
