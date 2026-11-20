@@ -317,6 +317,35 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   })
   kapatIptal.addEventListener('click', () => kapatGonder(false))
 
+  // Güncelleme: yeni sürüm şeridi + "Güncellemeleri denetle" + otomatik denetim ayarı. Otomatik indirme/kurma yok.
+  const yeniSurum = h('div', { class: 'uyari yeniSurum', role: 'status', hidden: true })
+  const guncelDurum = h('span', { class: 'soluk' })
+  const guncelDugme = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Güncellemeleri denetle')
+  const otoTik = h('input', { type: 'checkbox', id: 'otoGuncelTik' })
+  const guncelKutu = h('div', { class: 'araclar guncelSatiri' },
+    h('span', { class: 'sinirEtiket' }, 'Sürüm ', h('b', { class: 'surumNo' }, '—')), guncelDugme,
+    h('label', { for: 'otoGuncelTik', class: 'sinirEtiket', title: 'Açılıştan ~1 dk sonra ve 24 saatte bir GitHub üzerindeki son sürüme bakar' }, otoTik, 'Otomatik denetle'), guncelDurum)
+  function setGuncelleme (g) {
+    guncelKutu.querySelector('.surumNo').textContent = 'v' + g.current
+    otoTik.checked = !!g.autoUpdateCheck
+    yeniSurum.hidden = !g.available
+    if (g.available) {
+      yeniSurum.replaceChildren('Yeni sürüm var: ', h('b', null, g.tag || ('v' + g.latest)), ' — ',
+        g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : 'sürüm sayfası yok')
+    }
+    guncelDurum.textContent = g.status === 'guncel' ? 'Güncelsin.' : g.status === 'surum-yok' ? 'Henüz yayınlanmış sürüm yok.'
+      : g.status === 'denetlenemedi' ? 'Denetlenemedi (internet yok olabilir).' : g.status === 'yeni' ? '' : ''
+  }
+  async function guncelYukle (denetle) {
+    guncelDugme.disabled = true
+    try { setGuncelleme(await (denetle ? post('/api/guncelleme/denetle') : api('/api/guncelleme'))) } catch (e) { if (denetle) toast(e.message, 'hata') } finally { guncelDugme.disabled = false }
+  }
+  guncelDugme.addEventListener('click', () => guncelYukle(true))
+  otoTik.addEventListener('change', async () => {
+    try { await post('/api/settings', { autoUpdateCheck: otoTik.checked }); toast(otoTik.checked ? 'Otomatik güncelleme denetimi açık.' : 'Otomatik güncelleme denetimi kapalı.', 'ok') } catch (e) { toast(e.message, 'hata'); otoTik.checked = !otoTik.checked }
+  })
+  guncelYukle(false)
+
   const sinirAyar = h('div', { class: 'araclar sinirlar' },
     h('span', { class: 'sinirEtiket' }, 'Yeni indirmeler için hız sınırı', varsayilan.el), hepsine,
     h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el),
@@ -325,7 +354,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   root.append(
     h('h1', null, baslik),
     h('p', { class: 'soluk', style: 'margin:0 0 10px' }, 'Cihazına indirilen filmler ve diziler. Bitenler internetsiz de oynar.'),
-    motorUyari, baglanti,
+    yeniSurum, motorUyari, baglanti,
     h('div', { class: 'serit' },
       h('div', null, strip.disk, h('span', null, 'İndirmelerin kapladığı alan')),
       h('div', null, strip.bos, h('span', null, 'Diskte boş alan')),
@@ -333,6 +362,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       h('div', null, strip.aktif, h('span', null, 'Etkin indirme'))),
     klasorAyar,
     kapatKutu,
+    guncelKutu,
     sinirAyar,
     h('div', { class: 'suzgec' }, chips),
     list, bos)

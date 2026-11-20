@@ -171,6 +171,13 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - `false`: zamanlamayı kapatır; geri sayım sürüyorsa `shutdown.exe /a` ile iptal eder (iptal edilemezse `502`; elle `shutdown /a`).
   - **Güvenlik:** gerçek `shutdown.exe`'ye yalnız sınama kipi DEĞİLken ve `OFFLINE_KAPATMA_KOMUTU` verilmemişken gidilir. `OFFLINE_KAPATMA_KOMUTU` bir program/betik yoludur (`.mjs/.js` node ile), aynı bağımsız değişkenlerle (`/s /t 60 /c …`, `/a`) çalışır. Sınama kipinde (`OFFLINE_DATA_DIR`) değişken yoksa **hiçbir program çalışmaz**: yalnız günlüğe yazılır, `simulated: true` sahte geri sayım görünür.
 
+### Güncelleme denetimi
+`package.json` sürümü ile GitHub'ın son sürümü (`https://api.github.com/repos/<updateRepo>/releases/latest`, `config.json` `updateRepo`, vars. `AcarPlus/stremio-offline`) karşılaştırılır; `tag_name` "v1.2.0" biçimi, basit sayısal semver (ön ek/son ek yok sayılır). **Otomatik indirme/kurma yok**, yalnız bilgi.
+- `GET /api/guncelleme` → son durum: `{ current, status, available, latest, tag, url, checkedAt, error, autoUpdateCheck, repo }`. `status`: `hic` (henüz denetlenmedi) | `guncel` | `yeni` (`available: true`; `url` sürüm sayfası, yalnız `https://`) | `surum-yok` (depo yayında değil / 404: normal) | `denetlenemedi` (ağ yok, zaman aşımı, 5xx, bozuk yanıt: sessiz, `error` kısa neden).
+- `POST /api/guncelleme/denetle` (gövdesiz) → denetler (en çok 10 sn) ve aynı durumu döndürür.
+- Otomatik: servis açılışından ~1 dk sonra ve 24 saatte bir, `autoUpdateCheck` açıksa (vars. açık, kalıcı; `POST /api/settings { "autoUpdateCheck": false }`). İstekte `User-Agent: stremio-offline`, başka kimlik bilgisi yok. Arayüz yeni sürümde İndirme Merkezi'nde şerit gösterir (sürüm sayfası yeni sekmede).
+- Sınama: adres `OFFLINE_GUNCELLEME_URL` ile yerel sahte sunucuya yönlenir (`OFFLINE_GUNCELLEME_ILK_MS`, `OFFLINE_GUNCELLEME_ARALIK_MS` zamanlamayı kısaltır). Sınama kipinde (`OFFLINE_DATA_DIR`) bu adres yoksa ağa hiç çıkılmaz ve otomatik denetim kurulmaz.
+
 ### Eski uçlar (inject.js ve eski panel için korunur)
 - `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
 - `POST /api/download` gövde `{ type, id, infoHash, fileIdx, trackers, title, fileName }` → `{ ok, state, message, item }`. Zaten varsa: tamamlandıysa "Zaten indirilmiş", duraklatılmış/hatalıysa sürdürür, iniyorsa "Zaten iniyor (%x)".
@@ -232,6 +239,7 @@ Gömülü olmayan kipte "oynat" aynı `playUrl`'i yeni sekmede açar. Ana pencer
 | `metadataTimeoutSec` | 90 | |
 | `downloadLimit` | 0 | yeni indirmeler için varsayılan sınırın **ilk değeri**, bayt/sn, 0 sınırsız (sonrası `data/ayarlar.json`) |
 | `uploadLimit` | 100000 | yükleme sınırının ilk değeri, bayt/sn, süreç başına |
+| `updateRepo` | `AcarPlus/stremio-offline` | güncelleme denetimi için GitHub deposu (`sahip/depo`) |
 | `priorityThrottle` | 200000 | öncelik varken diğer etkin indirmelerin kısıldığı hız, ilk değer (sonrası `data/ayarlar.json`) |
 
 UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`--disable-dht-persistence`; aynı anda birden çok süreç böylece çakışmaz). Motor oturum kalıcılığı kapalıdır (`--disable-persistence`): doğruluk kaynağı `library.json` + `.torrent` önbelleği (`data/torrents/`); süreç her başladığında torrent aynı klasöre yeniden eklenip doğrulanır. Günlükler: kontrol `data/rqbit/rqbit.log`, indirme süreçleri `data/rqbit/motorlar/<yuva>/rqbit.log` (pid dosyası da orada); servis günlüğü `data/servis.log`. Eski tek oturum (`data/rqbit/oturum`) ilk açılışta `data/rqbit/oturum.v1-yedek` olarak kenara alınır.
@@ -243,6 +251,7 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 | `OFFLINE_DATA_DIR` | Veri klasörü. Verilirse kökteki `config.json` **okunmaz/yazılmaz**, indirme klasörü varsayılanı `<veri>/indirilenler` olur. Sınama kipinde gerçek servisin kapı aralığına girilmesin diye `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT`, `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE` **zorunludur** (eksikse servis hata verip açılmaz). |
 | `OFFLINE_DOWNLOAD_DIR` | İndirme klasörünün ilk değeri (arayüzden kaydedilen klasör bundan önceliklidir) |
 | `OFFLINE_KAPATMA_KOMUTU`, `OFFLINE_KAPAT_KONTROL_MS` | Bilgisayarı kapatma programı (sınama kipinde yoksa hiçbir şey çalışmaz) ve denetim aralığı |
+| `OFFLINE_GUNCELLEME_URL`, `OFFLINE_GUNCELLEME_ILK_MS`, `OFFLINE_GUNCELLEME_ARALIK_MS`, `OFFLINE_GUNCELLEME_REPO` | Güncelleme denetimi adresi (sahte sunucu) ve zamanlaması; `updateRepo` karşılığı |
 | `OFFLINE_KLASOR_SECICI` | `POST /api/klasor-sec` için sahte program (sınama kipinde yoksa pencere hiç açılmaz) |
 | `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT` | Kapılar |
 | `OFFLINE_PEER_LISTEN_IP` | `peerListenIp` (boş = rqbit varsayılanı) |
