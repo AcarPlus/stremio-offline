@@ -57,6 +57,8 @@ $bulgu = @()
 foreach ($f in Get-ChildItem $hedef -Recurse -File) {
     if ($f.Extension -in '.exe') { $metin = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($f.FullName)) }
     else { $metin = [IO.File]::ReadAllText($f.FullName) }
+    # Güncelleme denetiminin herkese açık GitHub deposu (config.mjs updateRepo) bilerek pakette: taramada sayılmaz
+    $metin = [regex]::Replace($metin, [regex]::Escape('AcarPlus/stremio-offline'), '', 'IgnoreCase')
     foreach ($a in $aranan) {
         # İkililerde derleme yolu gibi genel "C:\Users\" izleri olabilir; orada yalnız kullanıcı adı/e-posta aranır.
         # Çıplak kullanıcı adı da ikililerdeki base64 verisinde rastlantıyla geçebilir; ikililerde yol biçimi aranır.
