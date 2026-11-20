@@ -133,6 +133,13 @@ const { parseRuntime, qualityBadge, techTags } = OfflineYardimci // kalite rozet
 const LANG = { gb: 'İngilizce', us: 'İngilizce', tr: 'Türkçe', ru: 'Rusça', ua: 'Ukraynaca', fr: 'Fransızca', de: 'Almanca', es: 'İspanyolca', mx: 'İspanyolca', it: 'İtalyanca', pt: 'Portekizce', br: 'Portekizce', jp: 'Japonca', kr: 'Korece', cn: 'Çince', pl: 'Lehçe', nl: 'Felemenkçe', se: 'İsveççe', gr: 'Yunanca', in: 'Hintçe', sa: 'Arapça', cz: 'Çekçe', hu: 'Macarca', ro: 'Romence', th: 'Tayca' }
 const langName = c => LANG[c] || c.toUpperCase()
 const STATE_TR = { resolving: 'Bilgi alınıyor', downloading: 'İniyor', paused: 'Duraklatıldı', completed: 'Hazır', error: 'Hata' }
+// Kuralın beklettiği indirme (Ayarlar > İndirme): rozet ve açıklama
+const BEKLEME_TR = { kuyruk: 'Sırada', saat: 'Saatini bekliyor', disk: 'Disk dolu' }
+const BEKLEME_ACIKLAMA = {
+  kuyruk: 'Aynı anda indirme sınırı dolu; biri bitince kendiliğinden başlar. "Sürdür" ile hemen başlatabilirsin.',
+  saat: 'İzinli indirme saatlerinin dışındayız; saat gelince kendiliğinden başlar. "Sürdür" ile hemen başlatabilirsin.',
+  disk: 'Diskte ayarladığın en az boş alan kalmadı; yer açılınca kendiliğinden sürer.'
+}
 
 // ───────────────────────── gömülü kip ─────────────────────────
 const HOST_ORIGIN = (() => { try { return location.ancestorOrigins && location.ancestorOrigins[0] ? location.ancestorOrigins[0] : '*' } catch { return '*' } })()
@@ -229,64 +236,6 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   const cards = new Map()
   let items = []
 
-  // Hız sınırları: yeni indirmeler için varsayılan (+ hepsine uygula) ve yükleme sınırı (bütün indirmeler)
-  const varsayilan = limitPicker({
-    presets: DL_PRESETS, label: 'Yeni indirmeler için hız sınırı',
-    onSet: v => post('/api/settings', { defaultDownloadLimit: v }),
-    okText: v => 'Yeni indirmeler için hız sınırı: ' + fmtLimit(v)
-  })
-  const yukleme = limitPicker({
-    presets: UL_PRESETS, unit: 'KB', label: 'Yükleme sınırı',
-    onSet: v => post('/api/settings', { uploadLimit: v }),
-    okText: v => 'Yükleme sınırı: ' + fmtLimit(v)
-  })
-  const hepsine = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Varsayılan sınırı bütün indirmelere uygula' }, 'Hepsine uygula')
-  hepsine.addEventListener('click', async () => {
-    const r = await onayla({ baslik: 'Hepsine uygulansın mı?', metin: `Her indirmenin hız sınırı ${fmtLimit(varsayilan.value)} olur. Tek tek seçtiğin sınırlar değişir.`, tamam: 'Uygula' })
-    if (!r.ok) return
-    hepsine.disabled = true
-    try { await post('/api/settings', { applyToAll: true }); toast('Bütün indirmelerin hız sınırı: ' + fmtLimit(varsayilan.value), 'ok'); await tick() } catch (e) { toast(e.message, 'hata') } finally { hepsine.disabled = false }
-  })
-  const kisma = limitPicker({
-    presets: TH_PRESETS, unit: 'KB', label: 'Öncelikli indirme varken diğerlerinin hızı',
-    onSet: v => post('/api/settings', { priorityThrottle: v }),
-    okText: v => v > 0 ? 'Öncelik varken diğer indirmeler: ' + fmtLimit(v) : 'Öncelik diğer indirmeleri kısmaz'
-  })
-  // İndirme klasörü: yalnız yeni indirmelere uygulanır; süren ve biten indirmeler eski yerinde kalır
-  const klasorYol = h('code', { class: 'klasorYol' }, '—')
-  const klasorDugme = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Değiştir')
-  const klasorElle = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Klasör yolunu elle yaz' }, 'Elle yaz')
-  const klasorGiris = h('input', { type: 'text', class: 'klasorGiris', autocomplete: 'off', spellcheck: 'false', placeholder: 'D:\\Filmler', 'aria-label': 'İndirme klasörü yolu', hidden: true })
-  const klasorUygula = h('button', { type: 'button', class: 'dugme kucuk', hidden: true }, 'Uygula')
-  let klasorSimdi = ''
-  async function klasorUygulaYol (yol) {
-    try {
-      const r = await post('/api/settings', { downloadDir: yol })
-      klasorSimdi = r.downloadDir; klasorYol.textContent = klasorSimdi; klasorYol.title = klasorSimdi
-      klasorGiris.hidden = true; klasorUygula.hidden = true
-      toast('Yeni indirmeler şuraya inecek: ' + klasorSimdi + ' (süren ve biten indirmeler eski yerinde kalır)', 'ok')
-      await tick()
-    } catch (e) { toast(e.message, 'hata') }
-  }
-  function klasorGirisAc () {
-    klasorGiris.hidden = false; klasorUygula.hidden = false
-    if (!klasorGiris.value) klasorGiris.value = klasorSimdi
-    klasorGiris.focus(); klasorGiris.select()
-  }
-  klasorElle.addEventListener('click', () => { if (klasorGiris.hidden) klasorGirisAc(); else { klasorGiris.hidden = true; klasorUygula.hidden = true } })
-  klasorUygula.addEventListener('click', () => klasorUygulaYol(klasorGiris.value))
-  klasorGiris.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); klasorUygulaYol(klasorGiris.value) } })
-  klasorDugme.addEventListener('click', async () => {
-    klasorDugme.disabled = true
-    try {
-      const r = await post('/api/klasor-sec')
-      if (r.path) await klasorUygulaYol(r.path)
-    } catch (e) { toast(e.message + ' — yolu "Elle yaz" ile girebilirsin.', 'hata'); klasorGirisAc() } finally { klasorDugme.disabled = false }
-  })
-  const klasorAyar = h('div', { class: 'araclar klasorSatiri' },
-    h('span', { class: 'sinirEtiket' }, 'İndirme klasörü:'), klasorYol, klasorDugme, klasorElle, klasorGiris, klasorUygula,
-    h('span', { class: 'soluk klasorNot' }, 'Yeni indirmeler için; süren ve biten indirmeler eski yerinde kalır.'))
-
   // Hepsi bitince bilgisayarı kapat: bellekte (kalıcı değil), tetiklenince kendini kapatır; Windows 60 sn geri sayım yapar
   const kapatTik = h('input', { type: 'checkbox', id: 'kapatTik' })
   const kapatMetin = h('span', { class: 'soluk' })
@@ -322,39 +271,14 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   })
   kapatIptal.addEventListener('click', () => kapatGonder(false))
 
-  // Güncelleme: yeni sürüm şeridi + "Güncellemeleri denetle" + otomatik denetim ayarı. Otomatik indirme/kurma yok.
+  // Yeni sürüm şeridi (ayrıntı ve denetim Ayarlar'da)
   const yeniSurum = h('div', { class: 'uyari yeniSurum', role: 'status', hidden: true })
-  const guncelDurum = h('span', { class: 'soluk' })
-  const guncelDugme = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Güncellemeleri denetle')
-  const otoTik = h('input', { type: 'checkbox', id: 'otoGuncelTik' })
-  const guncelKutu = h('div', { class: 'araclar guncelSatiri' },
-    h('span', { class: 'sinirEtiket' }, 'Sürüm ', h('b', { class: 'surumNo' }, '—')), guncelDugme,
-    h('label', { for: 'otoGuncelTik', class: 'sinirEtiket', title: 'Açılıştan ~1 dk sonra ve 24 saatte bir GitHub üzerindeki son sürüme bakar' }, otoTik, 'Otomatik denetle'), guncelDurum)
-  function setGuncelleme (g) {
-    guncelKutu.querySelector('.surumNo').textContent = 'v' + g.current
-    otoTik.checked = !!g.autoUpdateCheck
-    yeniSurum.hidden = !g.available
-    if (g.available) {
-      yeniSurum.replaceChildren('Yeni sürüm var: ', h('b', null, g.tag || ('v' + g.latest)), ' — ',
-        g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : 'sürüm sayfası yok')
-    }
-    guncelDurum.textContent = g.status === 'guncel' ? 'Güncelsin.' : g.status === 'surum-yok' ? 'Henüz yayınlanmış sürüm yok.'
-      : g.status === 'denetlenemedi' ? 'Denetlenemedi (internet yok olabilir).' : g.status === 'yeni' ? '' : ''
-  }
-  async function guncelYukle (denetle) {
-    guncelDugme.disabled = true
-    try { setGuncelleme(await (denetle ? post('/api/guncelleme/denetle') : api('/api/guncelleme'))) } catch (e) { if (denetle) toast(e.message, 'hata') } finally { guncelDugme.disabled = false }
-  }
-  guncelDugme.addEventListener('click', () => guncelYukle(true))
-  otoTik.addEventListener('change', async () => {
-    try { await post('/api/settings', { autoUpdateCheck: otoTik.checked }); toast(otoTik.checked ? 'Otomatik güncelleme denetimi açık.' : 'Otomatik güncelleme denetimi kapalı.', 'ok') } catch (e) { toast(e.message, 'hata'); otoTik.checked = !otoTik.checked }
-  })
-  guncelYukle(false)
-
-  const sinirAyar = h('div', { class: 'araclar sinirlar' },
-    h('span', { class: 'sinirEtiket' }, 'Yeni indirmeler için hız sınırı', varsayilan.el), hepsine,
-    h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el),
-    h('span', { class: 'sinirEtiket', title: 'Bir indirme ★ öncelikli yapılınca diğer etkin indirmeler bu hıza kısılır (durmaz)' }, '★ Öncelik varken diğerleri', kisma.el))
+  api('/api/guncelleme').then(g => {
+    if (!g.available) return
+    yeniSurum.hidden = false
+    yeniSurum.replaceChildren('Yeni sürüm var: ', h('b', null, g.tag || ('v' + g.latest)), ' — ',
+      g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : 'sürüm sayfası yok')
+  }).catch(() => {})
 
   root.append(
     h('h1', null, baslik),
@@ -365,10 +289,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       h('div', null, strip.bos, h('span', null, 'Diskte boş alan')),
       h('div', null, strip.hiz, h('span', null, 'Toplam hız')),
       h('div', null, strip.aktif, h('span', null, 'Etkin indirme'))),
-    klasorAyar,
     kapatKutu,
-    guncelKutu,
-    sinirAyar,
     h('div', { class: 'suzgec' }, chips),
     list, bos)
 
@@ -397,8 +318,6 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     set(strip.bos, s.diskFreeBytes != null ? fmtBytes(s.diskFreeBytes) : '—')
     set(strip.hiz, fmtSpeed(s.downloadSpeed))
     set(strip.aktif, String(s.active))
-    if (s.downloadDir && s.downloadDir !== klasorSimdi) { klasorSimdi = s.downloadDir; klasorYol.textContent = klasorSimdi; klasorYol.title = klasorSimdi }
-    if (s.settings) { varsayilan.set(s.settings.defaultDownloadLimit); yukleme.set(s.settings.uploadLimit); kisma.set(s.settings.priorityThrottle) }
     motorUyari.hidden = !s.engine || s.engine.ready !== false ? true : false
     if (s.engine && s.engine.ready === false && s.engine.error) motorUyari.textContent = 'İndirme motoru hazır değil: ' + s.engine.error
   }
@@ -492,7 +411,11 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       })
       upd('baslik', it.displayName || it.name, t => { baslik.textContent = t })
       upd('bolum', episodeLabel(it), t => { bolum.textContent = t; bolum.hidden = !t })
-      upd('rozet', it.state, s => { rozet.textContent = STATE_TR[s] || s; rozet.className = 'rozet ' + s })
+      upd('rozet', it.state + ':' + (it.autoPaused || ''), () => {
+        rozet.textContent = it.state === 'paused' && it.autoPaused ? BEKLEME_TR[it.autoPaused] || 'Bekliyor' : STATE_TR[it.state] || it.state
+        rozet.className = 'rozet ' + it.state + (it.autoPaused ? ' bekliyor' : '')
+        rozet.title = it.state === 'paused' && it.autoPaused ? BEKLEME_ACIKLAMA[it.autoPaused] || '' : ''
+      })
       const sel = sortedFiles(it)
       upd('dosya', (sel.length === 1 ? sel[0].name : it.name) || '', t => { dosya.textContent = t; dosya.title = t })
       const pct = Math.floor(it.percent * 10) / 10
@@ -577,6 +500,199 @@ function viewHome (root, current, baslik = 'İndirmeler') {
 route(/^\/$/, (r, c) => viewHome(r, c), 'indirmeler')
 // Stremio gezinme çubuğundaki "İndirilenler" girişi: aynı liste (Tümü süzgeci), başlık farklı.
 route(/^\/indirilenler$/, (r, c) => viewHome(r, c, 'İndirilenler'), 'indirmeler')
+
+// ───────────────────────── Ayarlar ─────────────────────────
+// Bütün ayarlar burada; İndirmeler sayfasında yalnız özet, liste ve "bitince kapat" kalır.
+async function viewAyarlar (root, current) {
+  root.append(h('h1', null, 'Ayarlar'), yukleniyor('Ayarlar okunuyor…'))
+  let s
+  try { s = await api('/api/settings') } catch (e) { root.replaceChildren(h('h1', null, 'Ayarlar'), hataKutusu(e.message, () => render())); return }
+  if (!current()) return
+  root.replaceChildren(h('h1', null, 'Ayarlar'))
+
+  /** Ayarı kaydeder; başarısızsa geri alma işlevini çağırır. */
+  async function kaydet (patch, okMetin, geriAl) {
+    try { s = await post('/api/settings', patch); if (okMetin) toast(okMetin, 'ok'); durumYenile() } catch (e) { toast(e.message, 'hata'); if (geriAl) geriAl() }
+  }
+  const satir = (etiket, kontrol, aciklama) => h('div', { class: 'ayarSatir' },
+    h('div', { class: 'ayarEtiket' }, h('span', null, etiket), aciklama ? h('small', { class: 'soluk' }, aciklama) : null),
+    h('div', { class: 'ayarKontrol' }, kontrol))
+  const grup = (baslik, ...satirlar) => h('section', { class: 'ayarGrup' }, h('h2', null, baslik), satirlar)
+  function anahtar (key, okAcik, okKapali) {
+    const tik = h('input', { type: 'checkbox', id: 'ayar-' + key, class: 'anahtar', 'aria-label': key })
+    tik.checked = !!s[key]
+    tik.addEventListener('change', () => kaydet({ [key]: tik.checked }, tik.checked ? okAcik : okKapali, () => { tik.checked = !tik.checked }))
+    return tik
+  }
+  function secim (key, secenekler, okMetin) {
+    const sel = h('select', { 'aria-label': key }, secenekler.map(([v, t]) => h('option', { value: String(v) }, t)))
+    if (!secenekler.some(([v]) => v === s[key])) sel.append(h('option', { value: String(s[key]) }, String(s[key])))
+    sel.value = String(s[key])
+    let eski = sel.value
+    sel.addEventListener('change', () => {
+      const v = typeof s[key] === 'number' ? Number(sel.value) : sel.value
+      const once = eski
+      eski = sel.value
+      kaydet({ [key]: v }, okMetin(v), () => { sel.value = once; eski = once })
+    })
+    return sel
+  }
+
+  // ── İndirme
+  const durumKutu = h('div', { class: 'uyari', hidden: true, role: 'status' })
+  async function durumYenile () {
+    try {
+      const d = await api('/api/kurallar')
+      const m = []
+      if (d.offHours) m.push(`Şu an izinli indirme saatlerinin dışındasın (${s.scheduleStart}–${s.scheduleEnd}); yeni indirmeler sıraya girer.`)
+      if (d.diskLow) m.push(`Diskte ${s.minFreeGB} GB'den az yer kaldı; indirmeler durdu.`)
+      durumKutu.hidden = !m.length
+      durumKutu.textContent = m.join(' ')
+    } catch {}
+  }
+
+  const klasorYol = h('code', { class: 'klasorYol', title: s.downloadDir }, s.downloadDir)
+  const klasorDugme = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Değiştir')
+  const klasorElle = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Klasör yolunu elle yaz' }, 'Elle yaz')
+  const klasorGiris = h('input', { type: 'text', class: 'klasorGiris', autocomplete: 'off', spellcheck: 'false', placeholder: 'D:\\Filmler', 'aria-label': 'İndirme klasörü yolu', hidden: true })
+  const klasorUygula = h('button', { type: 'button', class: 'dugme kucuk', hidden: true }, 'Uygula')
+  async function klasorUygulaYol (yol) {
+    try {
+      s = await post('/api/settings', { downloadDir: yol })
+      klasorYol.textContent = s.downloadDir; klasorYol.title = s.downloadDir
+      klasorGiris.hidden = true; klasorUygula.hidden = true
+      toast('Yeni indirmeler şuraya inecek: ' + s.downloadDir + ' (süren ve biten indirmeler eski yerinde kalır)', 'ok')
+    } catch (e) { toast(e.message, 'hata') }
+  }
+  function klasorGirisAc () { klasorGiris.hidden = false; klasorUygula.hidden = false; if (!klasorGiris.value) klasorGiris.value = s.downloadDir; klasorGiris.focus(); klasorGiris.select() }
+  klasorElle.addEventListener('click', () => { if (klasorGiris.hidden) klasorGirisAc(); else { klasorGiris.hidden = true; klasorUygula.hidden = true } })
+  klasorUygula.addEventListener('click', () => klasorUygulaYol(klasorGiris.value))
+  klasorGiris.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); klasorUygulaYol(klasorGiris.value) } })
+  klasorDugme.addEventListener('click', async () => {
+    klasorDugme.disabled = true
+    try { const r = await post('/api/klasor-sec'); if (r.path) await klasorUygulaYol(r.path) } catch (e) { toast(e.message + ' — yolu "Elle yaz" ile girebilirsin.', 'hata'); klasorGirisAc() } finally { klasorDugme.disabled = false }
+  })
+
+  const saatAcik = anahtar('scheduleOn', 'Yalnız seçtiğin saatlerde indirilecek.', 'Saat kısıtı kalktı.')
+  const saatGiris = key => {
+    const inp = h('input', { type: 'time', value: s[key], class: 'saatGiris', 'aria-label': key === 'scheduleStart' ? 'Başlangıç saati' : 'Bitiş saati' })
+    inp.addEventListener('change', () => {
+      if (!/^\d\d:\d\d$/.test(inp.value)) return
+      const yeni = { ...s, [key]: inp.value }
+      kaydet({ [key]: inp.value }, 'İndirme saatleri: ' + yeni.scheduleStart + '–' + yeni.scheduleEnd, () => { inp.value = s[key] })
+    })
+    return inp
+  }
+
+  const enBuyuk = h('input', { type: 'number', min: '1', max: '1000', step: '1', value: String(s.autoMaxSizeGB), class: 'sayiGiris', 'aria-label': 'En büyük boyut (GB)' })
+  enBuyuk.addEventListener('change', () => {
+    const v = Math.round(Number(enBuyuk.value))
+    if (!(v >= 1 && v <= 1000)) { toast('1 ile 1000 GB arasında bir değer yaz.', 'hata'); enBuyuk.value = String(s.autoMaxSizeGB); return }
+    kaydet({ autoMaxSizeGB: v }, 'Otomatik seçimde en büyük boyut: ' + v + ' GB', () => { enBuyuk.value = String(s.autoMaxSizeGB) })
+  })
+
+  root.append(durumKutu, grup('İndirme',
+    satir('İndirme klasörü', h('div', { class: 'satirIci' }, klasorYol, klasorDugme, klasorElle, klasorGiris, klasorUygula), 'Yalnız yeni indirmeler için; süren ve biten indirmeler eski yerinde kalır.'),
+    satir('Aynı anda en çok', secim('maxConcurrent', [[0, 'Sınırsız'], [1, '1 indirme'], [2, '2 indirme'], [3, '3 indirme'], [5, '5 indirme']], v => v ? `Aynı anda en çok ${v} indirme; fazlası sıraya girer.` : 'Aynı anda indirme sınırı kalktı.'),
+      'Fazlası "Sırada" bekler; biri bitince sıradaki kendiliğinden başlar.'),
+    satir('Yalnız şu saatlerde indir', h('div', { class: 'satirIci' }, saatAcik, saatGiris('scheduleStart'), h('span', { class: 'soluk' }, '–'), saatGiris('scheduleEnd')),
+      'Örneğin gece 01:00–08:00. Saat dışında indirmeler bekler; izlemek için başlattığın ya da elle sürdürdüğün indirme beklemez.'),
+    satir('Diskte en az boş alan', secim('minFreeGB', [[0, 'Kapalı'], [10, '10 GB'], [25, '25 GB'], [50, '50 GB'], [100, '100 GB']], v => v ? `Diskte ${v} GB'den az yer kalınca indirmeler durur.` : 'Disk alanı sınırı kapalı.'),
+      'Bu kadar yer kalınca indirmeler durur; yer açılınca kendiliğinden sürer.'),
+    satir('İndirme bitince bildirim', anahtar('notifyOnComplete', 'İndirme bitince Windows bildirimi gösterilecek.', 'Bildirim kapalı.'), 'Windows\'un sağ alt köşesinde kısa bir bildirim.'),
+    satir('Otomatik sürüm seçimi', h('div', { class: 'satirIci' },
+      secim('autoQuality', [['2160p', '2160p (4K)'], ['1080p', '1080p'], ['720p', '720p'], ['480p', '480p']], v => 'Otomatik seçimde kalite: ' + v),
+      h('span', { class: 'soluk' }, 'en çok'), enBuyuk, h('span', { class: 'soluk' }, 'GB')),
+    'Poster menüsündeki "Cihaza indir" sürümü kendisi seçer: bu kalite, bu boyutun altı, en çok kaynaklı olan.')))
+
+  // ── Hız
+  const varsayilan = limitPicker({ presets: DL_PRESETS, label: 'Yeni indirmeler için hız sınırı', onSet: v => post('/api/settings', { defaultDownloadLimit: v }), okText: v => 'Yeni indirmeler için hız sınırı: ' + fmtLimit(v) })
+  const yukleme = limitPicker({ presets: UL_PRESETS, unit: 'KB', label: 'Yükleme sınırı', onSet: v => post('/api/settings', { uploadLimit: v }), okText: v => 'Yükleme sınırı: ' + fmtLimit(v) })
+  const kisma = limitPicker({ presets: TH_PRESETS, unit: 'KB', label: 'Öncelikli indirme varken diğerlerinin hızı', onSet: v => post('/api/settings', { priorityThrottle: v }), okText: v => v > 0 ? 'Öncelik varken diğer indirmeler: ' + fmtLimit(v) : 'Öncelik diğer indirmeleri kısmaz' })
+  varsayilan.set(s.defaultDownloadLimit); yukleme.set(s.uploadLimit); kisma.set(s.priorityThrottle)
+  const hepsine = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Varsayılan sınırı bütün indirmelere uygula' }, 'Hepsine uygula')
+  hepsine.addEventListener('click', async () => {
+    const r = await onayla({ baslik: 'Hepsine uygulansın mı?', metin: `Her indirmenin hız sınırı ${fmtLimit(varsayilan.value)} olur. Tek tek seçtiğin sınırlar değişir.`, tamam: 'Uygula' })
+    if (!r.ok) return
+    hepsine.disabled = true
+    try { await post('/api/settings', { applyToAll: true }); toast('Bütün indirmelerin hız sınırı: ' + fmtLimit(varsayilan.value), 'ok') } catch (e) { toast(e.message, 'hata') } finally { hepsine.disabled = false }
+  })
+  root.append(grup('Hız',
+    satir('Yeni indirmeler için hız sınırı', h('div', { class: 'satirIci' }, varsayilan.el, hepsine), 'Her indirmenin kendi sınırı İndirmeler listesinden ayrıca değişir.'),
+    satir('Yükleme sınırı', yukleme.el, 'İndirirken başkalarına gönderilen veri (her indirme için).'),
+    satir('★ Öncelik varken diğerleri', kisma.el, 'Bir indirme öncelikli yapılınca diğerleri bu hıza iner (durmaz).')))
+
+  // ── Tercih, Klip, Görünüm
+  root.append(
+    grup('Tercih',
+      satir('Türkçe sürümleri öne al', anahtar('preferTurkish', 'Türkçe dublaj/altyazılı sürümler listede önce gelecek.', 'Sürümler yalnız kaynak sayısına göre sıralanacak.'),
+        'Sürüm listesinde ve otomatik seçimde Türkçe ses ya da altyazı içerenler (🇹🇷, TR, Dublaj) önce gelir.')),
+    grup('Klip',
+      satir('Klip uzunluğu', secim('clipSeconds', [[30, '30 sn'], [60, '60 sn'], [90, '90 sn']], v => 'Klip uzunluğu: ' + v + ' sn'), 'İndirmeden önce kaliteye bakmak için alınan örnek.'),
+      satir('Klip başlangıcı', secim('clipStartPct', [[10, 'Filmin %10 noktası'], [20, 'Filmin %20 noktası'], [30, 'Filmin %30 noktası'], [40, 'Filmin %40 noktası'], [50, 'Filmin ortası']], v => 'Klip filmin %' + v + ' noktasından alınacak.'),
+        'Baştaki jenerik yerine sahnenin olduğu bir yerden.')),
+    grup('Görünüm',
+      satir('Posterlerde "✓ Offline" rozeti', anahtar('showBadges', 'Rozetler gösterilecek.', 'Rozetler gizlendi.'), 'Stremio\'daki posterlerin sağ üst köşesinde indirme durumu.')))
+
+  // ── Bakım
+  const otoTik = h('input', { type: 'checkbox', class: 'anahtar', id: 'ayar-otobaslat', 'aria-label': 'Oturum açılınca başlat' })
+  const otoNot = h('small', { class: 'soluk' })
+  api('/api/bakim/otobaslat').then(o => { otoTik.checked = !!o.enabled; otoTik.disabled = !o.available; if (!o.available) otoNot.textContent = '(bu kipte değiştirilemez)' }).catch(() => { otoTik.disabled = true })
+  otoTik.addEventListener('change', async () => {
+    otoTik.disabled = true
+    try {
+      const o = await post('/api/bakim/otobaslat', { enabled: otoTik.checked })
+      otoTik.checked = !!o.enabled
+      toast(o.enabled ? 'Servis oturum açılınca kendiliğinden başlayacak.' : 'Otomatik başlatma kapatıldı. "Stremio" kısayolu servisi yine gerektiğinde başlatır.', 'ok')
+    } catch (e) { toast(e.message, 'hata'); otoTik.checked = !otoTik.checked } finally { otoTik.disabled = false }
+  })
+  const izSil = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Şimdi uygula')
+  izSil.addEventListener('click', async () => {
+    if (!(s.deleteWatchedDays > 0)) { toast('Önce bir süre seç.', 'hata'); return }
+    const r = await onayla({ baslik: 'İzlenenler silinsin mi?', metin: `Son oynatılmasının üzerinden ${s.deleteWatchedDays} günden fazla geçmiş bitmiş indirmeler dosyalarıyla birlikte diskten silinir.`, tamam: 'Sil' })
+    if (!r.ok) return
+    izSil.disabled = true
+    try { await post('/api/bakim/izlenenleri-sil'); toast('İzlenenler temizlendi.', 'ok') } catch (e) { toast(e.message, 'hata') } finally { izSil.disabled = false }
+  })
+  const izSecim = secim('deleteWatchedDays', [[0, 'Kapalı'], [7, '7 gün sonra'], [14, '14 gün sonra'], [30, '30 gün sonra'], [90, '90 gün sonra']],
+    v => v ? `Oynatılan indirmeler son oynatmadan ${v} gün sonra silinecek.` : 'İzlenenler kendiliğinden silinmeyecek.')
+  const klipSil = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Klipleri temizle')
+  klipSil.addEventListener('click', async () => {
+    klipSil.disabled = true
+    try {
+      const r = await post('/api/bakim/klip-temizle')
+      toast(r.count ? `${r.count} klip silindi (${fmtBytes(r.freedBytes)} açıldı).` : `Silinecek klip yoktu${r.freedBytes ? ' (' + fmtBytes(r.freedBytes) + ' geçici dosya silindi)' : ''}.`, 'ok')
+    } catch (e) { toast(e.message, 'hata') } finally { klipSil.disabled = false }
+  })
+  const gunluk = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Günlük klasörünü aç')
+  gunluk.addEventListener('click', async () => { try { const r = await post('/api/bakim/gunluk-ac'); toast('Açıldı: ' + r.path, 'ok') } catch (e) { toast(e.message, 'hata') } })
+
+  const guncelDurum = h('span', { class: 'soluk' })
+  const surumNo = h('b', null, '—')
+  const guncelDugme = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Güncellemeleri denetle')
+  const otoGuncel = anahtar('autoUpdateCheck', 'Otomatik güncelleme denetimi açık.', 'Otomatik güncelleme denetimi kapalı.')
+  function setGuncelleme (g) {
+    surumNo.textContent = 'v' + g.current
+    guncelDurum.replaceChildren(g.status === 'guncel' ? 'Güncelsin.' : g.status === 'surum-yok' ? 'Henüz yayınlanmış sürüm yok.'
+      : g.status === 'denetlenemedi' ? 'Denetlenemedi (internet yok olabilir).'
+        : g.available ? h('span', null, 'Yeni sürüm: ', h('b', null, g.tag || ('v' + g.latest)), ' ', g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : '') : '')
+  }
+  async function guncelYukle (denetle) {
+    guncelDugme.disabled = true
+    try { setGuncelleme(await (denetle ? post('/api/guncelleme/denetle') : api('/api/guncelleme'))) } catch (e) { if (denetle) toast(e.message, 'hata') } finally { guncelDugme.disabled = false }
+  }
+  guncelDugme.addEventListener('click', () => guncelYukle(true))
+  guncelYukle(false)
+
+  root.append(grup('Bakım',
+    satir('İzlenenleri sil', h('div', { class: 'satirIci' }, izSecim, izSil), 'Bitmiş bir indirme son oynatıldıktan bu kadar gün sonra dosyasıyla silinir. Hiç oynatılmamış indirmelere dokunulmaz.'),
+    satir('Klipler', klipSil, 'Kalite örneği için alınan klipler zaten 24 saatte silinir; hemen yer açmak için.'),
+    satir('Günlükler', gunluk, 'Bir sorun olursa servis.log ve baslatici.log bu klasörde.'),
+    satir('Oturum açılınca başlat', h('div', { class: 'satirIci' }, otoTik, otoNot), 'Kapalıyken de "Stremio" kısayolu servisi gerektiğinde başlatır; açıkken indirmeler Stremio açılmadan da sürer.'),
+    satir(h('span', null, 'Sürüm ', surumNo), h('div', { class: 'satirIci' }, guncelDugme, h('label', { class: 'satirIci', title: 'Açılıştan ~1 dk sonra ve 24 saatte bir GitHub\'daki son sürüme bakar' }, otoGuncel, 'Otomatik denetle'), guncelDurum))))
+  durumYenile()
+}
+route(/^\/ayarlar$/, viewAyarlar, 'ayarlar')
 
 // ───────────────────────── 2) Arama ─────────────────────────
 async function viewAra (root, q, current) {

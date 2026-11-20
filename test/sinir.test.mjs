@@ -96,7 +96,9 @@ describe('indirme başına hız sınırı', () => {
     // Kalıcı: ayarlar data/ayarlar.json'da
     await svc.stop()
     svc = await startService(sc)
-    assert.deepEqual(await svc.api('GET', '/api/settings'), { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
+    const kalici = await svc.api('GET', '/api/settings')
+    assert.deepEqual({ defaultDownloadLimit: kalici.defaultDownloadLimit, uploadLimit: kalici.uploadLimit, priorityThrottle: kalici.priorityThrottle, downloadDir: kalici.downloadDir, autoUpdateCheck: kalici.autoUpdateCheck },
+      { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
     assert.ok(fs.existsSync(path.join(sc.dataDir, 'ayarlar.json')))
     // Yeni indirme yeni varsayılanı alır
     const k = await svc.api('POST', '/api/items', { infoHash: fx.klip.infoHash, files: [0], type: 'movie', id: 'tt0000004' })

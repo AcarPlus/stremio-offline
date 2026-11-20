@@ -113,6 +113,30 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
 - `POST /api/settings` `{ "priorityThrottle": 200000 }`: kısma hızı (vars. 200 KB/sn; `0` = öncelik kimseyi kısmaz), kalıcı, çalışan süreçlere hemen uygulanır.
 - `GET /api/engines` (tanı) → `{ control: { apiPort, pid, ready }, engines: [{ infoHash, slot, apiPort, peerPort, pid, ready, restarts, limits }] }`.
 
+### Genel ayarlar ve kurallar (Ayarlar sayfası, 1.2.0)
+`GET /api/settings` hız sınırları, `downloadDir`, `autoUpdateCheck` ile birlikte şu alanları da döndürür; `POST /api/settings` ile değişir (önce hepsi doğrulanır, geçersiz alan varsa hiçbiri uygulanmaz, `400`). Kalıcıdır (`data/ayarlar.json`). Doğrulama `lib/settings.mjs` `GENEL`.
+
+| Alan | Tür | Varsayılan | Anlamı |
+|---|---|---|---|
+| `maxConcurrent` | tam sayı 0–20 | 0 | Aynı anda en çok kaç indirme (0 = sınırsız); fazlası `autoPaused: "kuyruk"` ile bekler |
+| `scheduleOn`, `scheduleStart`, `scheduleEnd` | bool, `"SS:DD"` | false, 01:00, 08:00 | Yalnız bu saatlerde indir (gece yarısını aşabilir; başlangıç = bitiş bütün gün); dışında `autoPaused: "saat"` |
+| `minFreeGB` | tam sayı | 0 | Diskte bundan az yer kalınca oynatılmayan indirmeler durur (`"disk"`), +1 GiB açılınca sürer |
+| `notifyOnComplete` | bool | true | İndirme bitince Windows bildirimi (gizli PowerShell, NotifyIcon) |
+| `autoQuality`, `autoMaxSizeGB` | `2160p/1080p/720p/480p`, 1–1000 | config.json | Kart menüsündeki "Cihaza indir" otomatik seçimi |
+| `preferTurkish` | bool | false | Sürüm listesinde ve otomatik seçimde Türkçe (🇹🇷, TR, Dublaj…) önce (`torrentio.mjs` `isTurkish`) |
+| `clipSeconds`, `clipStartPct` | 30/60/90, 0–90 | 60, 30 | Klip uzunluğu ve başlangıç noktası (sürenin yüzdesi) |
+| `showBadges` | bool | true | Stremio posterlerinde rozet (`/api/items` `summary.settings.showBadges`) |
+| `deleteWatchedDays` | tam sayı 0–3650 | 0 | Bitmiş indirme son oynatmasından bu kadar gün sonra dosyasıyla silinir (0 = kapalı); hiç oynatılmamışa dokunulmaz |
+
+Kurallar (`lib/kurallar.mjs`, `OFFLINE_KURAL_MS` aralıkla, vars. 15 sn; ayar değişince ve indirme bitince hemen): öğe görünümünde `autoPaused` (`kuyruk` | `saat` | `disk` | `null`) ve `lastPlayedAt`. Kullanıcı duraklatırsa `autoPaused` silinir, kural o öğeyi sürdürmez. Oynatılan indirme ve kural engellerken elle sürdürülen (ya da İndir+oynat ile başlatılan) indirme saat/kuyruk kuralından muaftır (bitene ya da elle duraklatılana dek); disk kuralı oynatılmayan her indirmeye uygulanır. Kuyrukta önce öncelikli, sonra en eski eklenen başlar; sınır aşılırsa en yeni eklenen sıraya döner.
+
+- `GET /api/kurallar` → `{ diskLow, diskFreeBytes, offHours, autostart }`.
+- `POST /api/bakim/klip-temizle` → `{ freedBytes, count }` (çalışan klip işi hariç).
+- `POST /api/bakim/gunluk-ac` → veri klasörünü Gezgin'de açar, `{ path }`. Sınama kipinde `OFFLINE_KLASOR_ACICI` yoksa `503`.
+- `POST /api/bakim/izlenenleri-sil` → `deleteWatchedDays` kuralını hemen uygular (kapalıysa `400`).
+- `GET|POST /api/bakim/otobaslat` `{ enabled }` → Başlangıç klasöründeki "Stremio Offline Servis" kısayolu (`data/kurulum.json` `klasorler.baslangic`, yoksa Windows'un Startup klasörü; `kur.ps1` ile aynı hedef/argüman). Sınama kipinde `OFFLINE_BASLANGIC_KLASORU` yoksa değiştirilemez (`503`); `OFFLINE_KISAYOL_YAZICI` kısayolu yazan program (sınama).
+- Sınama: `OFFLINE_BILDIRIM_KOMUTU` bildirim programı (`SO_BASLIK`, `SO_METIN` ortam değişkenleriyle); sınama kipinde yoksa bildirim gösterilmez.
+
 ### Torrentio katmanı
 - `GET /api/versions?type=movie&id=tt1727587` ya da `?type=series&id=tt0903747:1:2` → `{ type, id, versions: [sürüm, …] }` (seeder'a göre azalan). Sürüm:
   ```json
