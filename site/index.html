@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stremio Offline</title>
+<meta name="description" content="Stremio'da izlediğin filmleri ve dizileri bilgisayara indir, internet yokken de Stremio'nun içinden izle. Ücretsiz ve açık kaynak.">
+<meta property="og:title" content="Stremio Offline">
+<meta property="og:description" content="Download Stremio movies and series to your PC and watch them offline, right inside Stremio 5.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://acarplus.github.io/stremio-offline/">
+<meta name="theme-color" content="#0d1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2322c55e'/%3E%3Cpath d='M32 14v26m-11-11 11 11 11-11M18 48h28' stroke='%230d1020' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0d1020; --bg2:#141833; --card:#181d3a; --line:#2a3160;
+  --text:#eef0ff; --muted:#a3a9cc; --accent:#22c55e; --accent2:#16a34a; --violet:#8b7cf6;
+  --radius:16px; --max:1080px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 20px}
+[data-en]{display:none}
+html[lang=en] [data-tr]{display:none}
+html[lang=en] [data-en]{display:revert}
+
+/* üst çubuk */
+nav{position:sticky;top:0;z-index:5;background:rgba(13,16,32,.82);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.06)}
+nav .wrap{display:flex;align-items:center;gap:16px;height:60px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none;letter-spacing:.2px}
+.logo i{width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center}
+.logo i svg{width:18px;height:18px}
+nav .sp{flex:1}
+nav a.lnk{color:var(--muted);text-decoration:none;font-size:15px}
+nav a.lnk:hover{color:var(--text)}
+.dil{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:5px 12px;font:inherit;font-size:14px;cursor:pointer}
+.dil:hover{border-color:var(--muted)}
+
+/* giriş */
+.hero{position:relative;overflow:hidden;padding:72px 0 56px}
+.hero:before{content:"";position:absolute;inset:-40% -10% auto;height:620px;background:radial-gradient(closest-side,rgba(139,124,246,.28),transparent 70%),radial-gradient(closest-side at 70% 60%,rgba(34,197,94,.18),transparent 70%);pointer-events:none}
+.hero .wrap{position:relative;display:grid;grid-template-columns:1.05fr 1fr;gap:48px;align-items:center}
+.rozet{display:inline-flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin-bottom:18px}
+.rozet b{color:var(--accent);font-weight:600}
+h1{font-size:clamp(34px,5vw,54px);line-height:1.08;margin:0 0 18px;letter-spacing:-.5px}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent),#7ee2a8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.alt{font-size:18px;color:var(--muted);margin:0 0 28px;max-width:34em}
+.btns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:600;border-radius:12px;padding:13px 22px;transition:transform .15s,background .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn.ana{background:var(--accent);color:#06210f}
+.btn.ana:hover{background:#2fd56b}
+.btn.ikinci{border:1px solid var(--line);color:var(--text)}
+.btn.ikinci:hover{border-color:var(--muted)}
+.btn svg{width:18px;height:18px}
+.not{font-size:13px;color:var(--muted);margin-top:14px}
+
+/* temsili ekran */
+.ekran{background:var(--bg2);border:1px solid var(--line);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden}
+.ekran .ust{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.ekran .ust span{width:10px;height:10px;border-radius:50%;background:#2b3264}
+.ekran .ic{display:grid;grid-template-columns:110px 1fr;gap:16px;padding:18px}
+.afis{position:relative;aspect-ratio:2/3;border-radius:10px;background:linear-gradient(160deg,#3b3f7a,#1d2048 60%,#2a1f4d)}
+.afis .r{position:absolute;top:6px;right:6px;background:var(--accent);color:#06210f;font-size:10px;font-weight:700;border-radius:6px;padding:2px 6px}
+.sat{height:10px;border-radius:5px;background:#2a3160;margin-bottom:9px}
+.sat.b{height:16px;width:70%;background:#3a4280;margin-bottom:12px}
+.etk{display:flex;gap:8px;margin:14px 0 4px;flex-wrap:wrap}
+.etk span{font-size:12px;border-radius:8px;padding:6px 10px;background:#262c58;color:var(--muted)}
+.etk span.y{background:var(--accent);color:#06210f;font-weight:700;box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+.ilerle{margin:14px 18px 18px;background:#11152c;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px}
+.ilerle .ad{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:8px}
+.ilerle .ad b{color:var(--text);font-weight:600}
+.cubuk{height:7px;border-radius:4px;background:#262c58;overflow:hidden}
+.cubuk i{display:block;height:100%;width:64%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:4px;animation:dol 6s ease-in-out infinite alternate}
+@keyframes dol{from{width:38%}to{width:86%}}
+
+/* bölümler */
+section{padding:64px 0}
+h2{font-size:clamp(26px,3.4vw,34px);margin:0 0 10px;letter-spacing:-.3px}
+.alt2{color:var(--muted);margin:0 0 36px;max-width:40em}
+.izgara{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.kart{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.kart .ik{width:40px;height:40px;border-radius:11px;background:rgba(34,197,94,.13);display:grid;place-items:center;margin-bottom:14px}
+.kart .ik svg{width:20px;height:20px;stroke:var(--accent)}
+.kart h3{margin:0 0 6px;font-size:17px}
+.kart p{margin:0;color:var(--muted);font-size:15px}
+
+.adimlar{counter-reset:a;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.adim{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 22px 22px 70px}
+.adim:before{counter-increment:a;content:counter(a);position:absolute;left:20px;top:20px;width:34px;height:34px;border-radius:50%;background:var(--violet);color:#120c33;font-weight:800;display:grid;place-items:center}
+.adim h3{margin:0 0 4px;font-size:17px}
+.adim p{margin:0;color:var(--muted);font-size:15px}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.92em;background:#232955;border-radius:6px;padding:1px 6px;color:var(--text)}
+.gerek{margin-top:20px;color:var(--muted);font-size:15px}
+
+.nasil{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.nasil ul{margin:0;padding-left:20px;color:var(--muted)}
+.nasil li{margin:6px 0}
+.nasil li b{color:var(--text)}
+
+details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:12px}
+summary::-webkit-details-marker{display:none}
+summary:after{content:"+";color:var(--muted);font-weight:400;font-size:20px;line-height:1}
+details[open] summary:after{content:"−"}
+details p{color:var(--muted);margin:10px 0 0}
+
+.son{text-align:center;background:linear-gradient(180deg,transparent,rgba(139,124,246,.10));border-top:1px solid rgba(255,255,255,.05)}
+.son .btns{justify-content:center}
+footer{border-top:1px solid rgba(255,255,255,.06);padding:28px 0 40px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between}
+footer p{margin:0;max-width:46em}
+
+@media (max-width:900px){
+  .hero .wrap{grid-template-columns:1fr}
+  .izgara,.adimlar{grid-template-columns:1fr 1fr}
+  .nasil{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  .wrap{padding:0 16px}
+  nav a.lnk{display:none}
+  .hero{padding:44px 0 36px}
+  .izgara,.adimlar{grid-template-columns:1fr}
+  .ekran .ic{grid-template-columns:84px 1fr}
+  section{padding:48px 0}
+}
+@media (prefers-reduced-motion:reduce){.cubuk i{animation:none}.btn{transition:none}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#"><i><svg viewBox="0 0 24 24" fill="none" stroke="#0d1020" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M6 20h12"/></svg></i>Stremio Offline</a>
+    <span class="sp"></span>
+    <a class="lnk" href="#ozellikler"><span data-tr>Özellikler</span><span data-en>Features</span></a>
+    <a class="lnk" href="#kurulum"><span data-tr>Kurulum</span><span data-en>Install</span></a>
+    <a class="lnk" href="#sss"><span data-tr>SSS</span><span data-en>FAQ</span></a>
+    <a class="lnk" href="https://github.com/AcarPlus/stremio-offline">GitHub</a>
+    <button class="dil" id="dil" type="button" aria-label="Dil / Language">EN</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <div class="rozet"><b>v1.2.0</b> · Windows · Stremio 5 · <span data-tr>Ücretsiz, açık kaynak</span><span data-en>Free &amp; open source</span></div>
+      <h1 data-tr>Stremio'yu <em>internetsiz</em> izle.</h1>
+      <h1 data-en>Watch Stremio <em>offline</em>.</h1>
+      <p class="alt" data-tr>Filmleri ve dizileri tek tıkla bilgisayarına indir; uçakta, yolda, internetin olmadığı her yerde Stremio'nun kendi oynatıcısında izle. Düğmeler doğrudan Stremio'nun içinde.</p>
+      <p class="alt" data-en>Download movies and series to your PC in one click, then watch them in Stremio's own player on a plane, on the road, anywhere without internet. The buttons live right inside Stremio.</p>
+      <div class="btns">
+        <a class="btn ana" href="https://github.com/AcarPlus/stremio-offline/releases/latest/download/StremioOffline.zip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 20h14"/></svg>
+          <span data-tr>Windows için indir</span><span data-en>Download for Windows</span>
+        </a>
+        <a class="btn ikinci" href="https://github.com/AcarPlus/stremio-offline">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span data-tr>Kaynak kodu</span><span data-en>Source code</span>
+        </a>
+      </div>
+      <div class="not" data-tr>~42 MB · Windows 10/11 · yönetici yetkisi gerekmez</div>
+      <div class="not" data-en>~42 MB · Windows 10/11 · no admin rights needed</div>
+    </div>
+
+    <div class="ekran" aria-hidden="true">
+      <div class="ust"><span></span><span></span><span></span></div>
+      <div class="ic">
+        <div class="afis"><span class="r">⬇ OFFLINE</span></div>
+        <div>
+          <div class="sat b"></div>
+          <div class="sat" style="width:92%"></div>
+          <div class="sat" style="width:84%"></div>
+          <div class="sat" style="width:60%"></div>
+          <div class="etk">
+            <span>▶ <span data-tr>Fragman</span><span data-en>Trailer</span></span>
+            <span class="y">⬇ <span data-tr>İndir</span><span data-en>Download</span></span>
+            <span>▶ Offline</span>
+          </div>
+        </div>
+      </div>
+      <div class="ilerle">
+        <div class="ad"><b data-tr>İndiriliyor · 1080p</b><b data-en>Downloading · 1080p</b><span>12.4 MB/s</span></div>
+        <div class="cubuk"><i></i></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="ozellikler">
+  <div class="wrap">
+    <h2 data-tr>Stremio'nun içinde, olması gerektiği gibi</h2>
+    <h2 data-en>Inside Stremio, where it belongs</h2>
+    <p class="alt2" data-tr>Ayrı bir program açmazsın. İndirme, takip ve oynatma Stremio'nun kendi ekranlarında olur.</p>
+    <p class="alt2" data-en>No separate app to juggle. Downloading, tracking and playback all happen on Stremio's own screens.</p>
+    <div class="izgara">
+      <div class="kart">
+        <div class="ik"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 20h14"/></svg></div>
+        <h3 data-tr>Tek tıkla indir</h3><h3 data-en>One-click download</h3>
+        <p data-tr>Film sayfasında "İndir". Sürüm seçici kaliteyi, boyutu, seeder'ı ve dili gösterir; istersen indirirken izlemeye başla.</p>
+        <p data-en>A "Download" button on every movie page. The version picker shows quality, size, seeders and language. You can even start watching while it downloads.</p>
+      </div>
+      <div class="kart">
+        <div class="ik"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 5v4M16 5v4"/></svg></div>
+        <h3 data-tr>Sezonu indir</h3><h3 data-en>Download a season</h3>
+        <p data-tr>Bütün sezonu ya da seçtiğin bölümleri al. Başlamadan bölüm sayısını ve toplam boyutu görürsün.</p>
+        <p data-en>Grab a whole season or just the episodes you pick. You see the episode count and total size before anything starts.</p>
+      </div>
+      <div class="kart">
+        <div class="ik"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></svg></div>
+        <h3 data-tr>İnternetsiz oynat</h3><h3 data-en>Play offline</h3>
+        <p data-tr>İnen içerik Stremio'nun kendi oynatıcısında açılır. Posterinde rozet, sayfasında "Offline oynat" düğmesi olur.</p>
+        <p data-en>Downloads open in Stremio's own player. They get a poster badge and an "Offline play" button on their page.</p>
+      </div>
+      <div class="kart">
+        <div class="ik"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M18 14v6m-3-3h6"/></svg></div>
+        <h3 data-tr>İndirme Merkezi</h3><h3 data-en>Downloads center</h3>
+        <p data-tr>Yüzde, hız, kalan süre ve disk durumu. Duraklat, sürdür, sil; bir indirmeyi ★ öncelikli yap.</p>
+        <p data-en>Progress, speed, time left and disk usage. Pause, resume or delete, and mark one download as ★ priority.</p>
+      </div>
+      <div class="kart">
+        <div class="ik"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3 data-tr>Akıllı ayarlar</h3><h3 data-en>Smart settings</h3>
+        <p data-tr>İndirme kuyruğu, hız sınırı, saat aralığı (ör. yalnız gece), disk alt sınırı, bitince bildirim, hepsi bitince bilgisayarı kapat.</p>
+        <p data-en>Download queue, speed limits, a time window (for example, nights only), a free-disk-space guard, completion notifications and shutdown when everything is done.</p>
+      </div>
+      <div class="kart">
+        <div class="ik"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3 data-tr>Temiz ve geri alınabilir</h3><h3 data-en>Clean &amp; reversible</h3>
+        <p data-tr>Yönetici yetkisi, kayıt defteri, hizmet ya da güvenlik duvarı değişikliği yok. Kaldırınca her şey eski haline döner.</p>
+        <p data-en>No admin rights, no registry edits, no Windows services or firewall prompts. Uninstalling puts everything back.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="kurulum">
+  <div class="wrap">
+    <h2 data-tr>Kurulum bir dakika sürer</h2>
+    <h2 data-en>Installs in a minute</h2>
+    <p class="alt2" data-tr>Gerekli her şey pakette: ayrıca Node.js ya da torrent programı kurman gerekmez.</p>
+    <p class="alt2" data-en>Everything is in the package. You don't need to install Node.js or a torrent client.</p>
+    <div class="adimlar">
+      <div class="adim">
+        <h3 data-tr>İndir</h3><h3 data-en>Download</h3>
+        <p data-tr><a href="https://github.com/AcarPlus/stremio-offline/releases/latest/download/StremioOffline.zip">StremioOffline.zip</a> dosyasını indir ve kalıcı bir klasöre (ör. Belgeler) aç.</p>
+        <p data-en>Download <a href="https://github.com/AcarPlus/stremio-offline/releases/latest/download/StremioOffline.zip">StremioOffline.zip</a> and extract it to a permanent folder, such as Documents.</p>
+      </div>
+      <div class="adim">
+        <h3 data-tr>Kur</h3><h3 data-en>Install</h3>
+        <p data-tr>Klasördeki tek dosya olan <code>KUR.cmd</code>'ye çift tıkla.</p>
+        <p data-en>Double-click <code>KUR.cmd</code>, the only file in the folder (<em>kur</em> means install).</p>
+      </div>
+      <div class="adim">
+        <h3 data-tr>İzle</h3><h3 data-en>Watch</h3>
+        <p data-tr>Stremio düğmelerle açılır. Bundan sonra Stremio'yu her zamanki simgesinden açman yeter.</p>
+        <p data-en>Stremio opens with the new buttons. From then on, just open Stremio from its usual icon.</p>
+      </div>
+    </div>
+    <p class="gerek" data-tr><b>Gerekenler:</b> Windows 10 ya da 11 ve <a href="https://www.stremio.com/downloads">Stremio 5</a> (en az bir kez açılmış olmalı).</p>
+    <p class="gerek" data-en><b>Requirements:</b> Windows 10 or 11 and <a href="https://www.stremio.com/downloads">Stremio 5</a>, opened at least once.</p>
+  </div>
+</section>
+
+<section id="nasil">
+  <div class="wrap">
+    <h2 data-tr>Nasıl çalışır?</h2>
+    <h2 data-en>How does it work?</h2>
+    <p class="alt2" data-tr>Her şey senin bilgisayarında, yalnız 127.0.0.1 üzerinde çalışır. Hiçbir veri dışarı gönderilmez.</p>
+    <p class="alt2" data-en>Everything runs on your own PC, on 127.0.0.1 only. No data is sent anywhere.</p>
+    <div class="nasil">
+      <div class="kart">
+        <ul data-tr>
+          <li><b>Yerel servis:</b> Stremio eklentisi gibi davranır, indirme yöneticisini ve İndirme Merkezi'ni sunar.</li>
+          <li><b>İndirme motoru:</b> <a href="https://github.com/ikatkov/rqbit">rqbit</a>; indirme bitince yükleme durur.</li>
+          <li><b>Kaynaklar:</b> Stremio'da zaten gördüğün sonuçlar (Torrentio).</li>
+        </ul>
+        <ul data-en>
+          <li><b>Local service:</b> acts as a Stremio addon and runs the download manager and the Downloads center.</li>
+          <li><b>Engine:</b> <a href="https://github.com/ikatkov/rqbit">rqbit</a>. Uploading stops once a download finishes.</li>
+          <li><b>Sources:</b> the same results you already see in Stremio (Torrentio).</li>
+        </ul>
+      </div>
+      <div class="kart">
+        <ul data-tr>
+          <li><b>Düğmeler:</b> Stremio'nun sayfasına yerel bir bağlantıyla eklenir; Stremio'nun dosyalarına dokunulmaz.</li>
+          <li><b>Kısayollar:</b> masaüstü, Başlat menüsü ve görev çubuğundaki Stremio simgesi küçük bir başlatıcıya çevrilir (asılları yedeklenir).</li>
+          <li><b>Güncellemeler:</b> Stremio kendini güncelleyince ayar birkaç saniyede kendiliğinden geri gelir.</li>
+        </ul>
+        <ul data-en>
+          <li><b>Buttons:</b> added to Stremio's page over a local connection. No Stremio files are modified.</li>
+          <li><b>Shortcuts:</b> Stremio's desktop, Start menu and taskbar icons point to a small launcher. The originals are backed up.</li>
+          <li><b>Updates:</b> when Stremio updates itself, the setup comes back on its own within seconds.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="sss">
+  <div class="wrap">
+    <h2 data-tr>Sık sorulanlar</h2>
+    <h2 data-en>FAQ</h2>
+    <details>
+      <summary><span data-tr>"Windows bilgisayarınızı korudu" uyarısı çıktı</span><span data-en>Windows says "Windows protected your PC"</span></summary>
+      <p data-tr>Paket henüz dijital olarak imzalı değil. <b>Ek bilgi → Yine de çalıştır</b> de. Kaynak kodun tamamı GitHub'da açık.</p>
+      <p data-en>The package isn't code-signed yet. Click <b>More info → Run anyway</b>. All of the source code is public on GitHub.</p>
+    </details>
+    <details>
+      <summary><span data-tr>İndirdiğim dosyalar nereye kaydediliyor?</span><span data-en>Where are my downloads saved?</span></summary>
+      <p data-tr><code>Videolar\Stremio-Offline</code> klasörüne. Ayarlar'dan değiştirebilirsin.</p>
+      <p data-en>In <code>Videos\Stremio-Offline</code>. You can change this in Settings.</p>
+    </details>
+    <details>
+      <summary><span data-tr>Düğmeler görünmüyor</span><span data-en>I don't see the buttons</span></summary>
+      <p data-tr>Stremio'yu tamamen kapatıp kendi simgesinden yeniden aç. Stremio düğmesiz açıksa başlatıcı yeniden açmayı önerir. Stremio yeni güncellendiyse birkaç dakika bekle ya da <code>KUR.cmd</code>'yi yeniden çalıştır.</p>
+      <p data-en>Close Stremio completely and reopen it from its icon. If Stremio is already open without the buttons, the launcher offers to restart it. If Stremio just updated, wait a few minutes or run <code>KUR.cmd</code> again.</p>
+    </details>
+    <details>
+      <summary><span data-tr>Nasıl kaldırırım?</span><span data-en>How do I uninstall it?</span></summary>
+      <p data-tr><code>uygulama\KALDIR.cmd</code>'ye çift tıkla. Kısayollar eski haline döner, sonra klasörü silebilirsin. İndirdiğin videolar silinmez.</p>
+      <p data-en>Double-click <code>uygulama\KALDIR.cmd</code>. Your shortcuts are restored, and then you can delete the folder. Your downloaded videos are kept.</p>
+    </details>
+    <details>
+      <summary><span data-tr>Arayüz İngilizce mi?</span><span data-en>Is the interface in English?</span></summary>
+      <p data-tr>Şimdilik arayüz Türkçe. İngilizce arayüz planlanıyor.</p>
+      <p data-en>Not yet. The interface is in Turkish for now, and an English UI is planned.</p>
+    </details>
+    <details>
+      <summary><span data-tr>Telefonda çalışır mı?</span><span data-en>Does it work on phones?</span></summary>
+      <p data-tr>Şimdilik yalnız Windows. Android sürümü planlanıyor.</p>
+      <p data-en>Windows only for now. An Android version is planned.</p>
+    </details>
+  </div>
+</section>
+
+<section class="son">
+  <div class="wrap">
+    <h2 data-tr>Bir sonraki yolculuğa hazır ol</h2>
+    <h2 data-en>Get ready for your next trip</h2>
+    <p class="alt2" style="margin:0 auto 26px" data-tr>Ücretsiz, açık kaynak, MIT lisanslı.</p>
+    <p class="alt2" style="margin:0 auto 26px" data-en>Free, open source, MIT licensed.</p>
+    <div class="btns">
+      <a class="btn ana" href="https://github.com/AcarPlus/stremio-offline/releases/latest/download/StremioOffline.zip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 20h14"/></svg>
+        <span data-tr>Windows için indir</span><span data-en>Download for Windows</span>
+      </a>
+      <a class="btn ikinci" href="https://github.com/AcarPlus/stremio-offline/issues"><span data-tr>Sorun bildir</span><span data-en>Report an issue</span></a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p data-tr>Stremio Offline bağımsız bir projedir; Stremio ya da Torrentio ile bağlantılı değildir ve onlar tarafından onaylanmamıştır. İçerik barındırmaz ya da sağlamaz; indirdiklerinden ve ülkendeki telif hakkı yasalarına uymaktan sen sorumlusun.</p>
+    <p data-en>Stremio Offline is an independent project. It is not affiliated with or endorsed by Stremio or Torrentio. It hosts and provides no content. You're responsible for what you download and for respecting copyright law in your country.</p>
+    <span><a href="https://github.com/AcarPlus/stremio-offline">GitHub</a> · MIT</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var html = document.documentElement, btn = document.getElementById('dil');
+  function set(l) {
+    html.lang = l; btn.textContent = l === 'tr' ? 'EN' : 'TR';
+    try { localStorage.setItem('dil', l) } catch (e) {}
+  }
+  var kayit = null;
+  try { kayit = localStorage.getItem('dil') } catch (e) {}
+  var q = new URLSearchParams(location.search).get('lang');
+  set(q === 'en' || q === 'tr' ? q : kayit || ((navigator.language || 'tr').toLowerCase().indexOf('tr') === 0 ? 'tr' : 'en'));
+  btn.addEventListener('click', function () { set(html.lang === 'tr' ? 'en' : 'tr') });
+})();
+</script>
+</body>
+</html>

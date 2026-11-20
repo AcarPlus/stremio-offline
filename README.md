@@ -4,6 +4,8 @@
 
 Stremio Offline is a free, open-source companion for **Stremio 5 on Windows**. It adds **Download**, **Download season** and **Downloads** right inside Stremio. Downloaded movies and episodes play in Stremio's own player, even when you're offline: on a plane, a train, or wherever the connection is poor.
 
+🌐 **Website:** https://acarplus.github.io/stremio-offline/
+
 > 🇹🇷 Türkçe kurulum rehberi aşağıda: [Türkçe](#türkçe)
 > The user interface is currently in Turkish. English UI is planned.
 
