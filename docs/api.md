@@ -69,7 +69,7 @@ Notlar:
 ## Uçlar
 
 ### Durum
-- `GET /api/status` → `{ downloadDir, usedBytes, diskFreeBytes, diskTotalBytes, downloadSpeed, active, engine: { ready, restarts, error, processes }, settings: { defaultDownloadLimit, uploadLimit } }`
+- `GET /api/status` → `{ downloadDir, usedBytes, diskFreeBytes, diskTotalBytes, downloadSpeed, active, engine: { ready, restarts, error, processes }, settings: { defaultDownloadLimit, uploadLimit, priorityThrottle } }`
   - `engine.ready`: kontrol süreci hazır. `processes`: çalışan indirme süreci sayısı. `restarts`: bütün süreçlerin çökme sonrası yeniden başlama toplamı.
   - `usedBytes`: kütüphanedeki inmiş verinin toplamı. `diskFreeBytes`: indirme klasörünün bulunduğu diskte boş alan.
 - `GET /api/items` → `{ summary: <status ile aynı>, items: [öğe, …] }` (en yeni önce). Arayüz bunu ~1 sn'de bir sorgulayabilir.
@@ -158,6 +158,7 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - `HEAD` desteklenir; aralık dışı `416`. Yanıtta `Accept-Ranges: bytes`, `Content-Type` uzantıya göre.
 
 ### Eski uçlar (inject.js ve eski panel için korunur)
+- `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
 - `POST /api/download` gövde `{ type, id, infoHash, fileIdx, trackers, title, fileName }` → `{ ok, state, message, item }`. Zaten varsa: tamamlandıysa "Zaten indirilmiş", duraklatılmış/hatalıysa sürdürür, iniyorsa "Zaten iniyor (%x)".
 - `POST /api/auto` gövde `{ type, id }` → ayarlardaki kalite/boyut sınırına uyan en çok kaynaklı sürümü ekler. Aynı içerik varsa yukarıdaki gibi davranır.
 - `GET /api/library` → `{ downloadDir, items: [öğe, …] }`.
@@ -225,7 +226,7 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 
 | Değişken | Etki |
 |---|---|
-| `OFFLINE_DATA_DIR` | Veri klasörü. Verilirse kökteki `config.json` **okunmaz/yazılmaz**, indirme klasörü varsayılanı `<veri>/indirilenler` olur. |
+| `OFFLINE_DATA_DIR` | Veri klasörü. Verilirse kökteki `config.json` **okunmaz/yazılmaz**, indirme klasörü varsayılanı `<veri>/indirilenler` olur. Sınama kipinde gerçek servisin kapı aralığına girilmesin diye `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT`, `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE` **zorunludur** (eksikse servis hata verip açılmaz). |
 | `OFFLINE_DOWNLOAD_DIR` | İndirme klasörü |
 | `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT` | Kapılar |
 | `OFFLINE_PEER_LISTEN_IP` | `peerListenIp` (boş = rqbit varsayılanı) |
@@ -235,6 +236,7 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 | `OFFLINE_LOOPBACK=1` | DHT/tracker/LSD kapalı (internetsiz sınama) |
 | `OFFLINE_EXTRA_PEERS=ip:port,…` | Her eklemede/sürdürmede motora verilen eşler (sınama tohumlayıcısı) |
 | `OFFLINE_NO_INJECT=1` | Stremio arayüzüne düğme ekleme kapalı |
+| `OFFLINE_DEBUG_PORT` | Stremio hata ayıklama kapısı (`debugPort`). Sınama kipinde (`OFFLINE_DATA_DIR`) düğme ekleme yalnız bu verilirse açılır |
 | `OFFLINE_STDIN_CONTROL=1` | stdin'den `kapat` satırı gelince temiz kapanır |
 | `OFFLINE_POLL_MS` | Motor durum sorgu aralığı (vars. 1000) |
 

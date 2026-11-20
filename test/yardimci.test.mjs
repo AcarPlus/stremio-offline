@@ -59,3 +59,15 @@ test('silme iletişimi dosyaların diskten silineceğini ve torrent adını söy
   const same = y.deleteText({ name: 'X', sizeBytes: 0 }, fmt)
   assert.ok(!same.includes('Torrent:'), 'ad zaten gösteriliyorsa yinelenmez')
 })
+
+test('E6: bölüm bölüm kalite açılırı gruplanır, seçim grupla eşlenir', () => {
+  const opts = [
+    { quality: '4k', seeders: 5 }, { quality: '1226p', seeders: 9 }, { quality: '1080p', seeders: 1 },
+    { quality: 'scr', seeders: 3 }, { quality: '', seeders: 2 }, { quality: '720p', seeders: 0 }]
+  assert.deepEqual([...y.qualityGroups(opts)], ['2160p', '1080p', '720p', 'düşük', '?'], 'ham 1226p/4k/scr değil, gruplar')
+  assert.equal(y.pickOption(opts, 'auto'), 1, 'otomatik: 1080p grubu (1226p dahil)')
+  assert.equal(y.pickOption(opts, '2160p'), 0, '4k ile 2160p eşleşir')
+  assert.equal(y.pickOption(opts, 'düşük'), 3)
+  assert.equal(y.pickOption([], 'auto'), -1)
+  assert.equal(y.pickOption([{ quality: '720p', seeders: 2 }, { quality: '480p', seeders: 4 }], '1080p'), 0, 'eşleşme yoksa ilk')
+})

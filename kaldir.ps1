@@ -10,11 +10,22 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $sh = New-Object -ComObject WScript.Shell
 
+# E5: kisayolun argumanindaki tirnakli yollardan biri TAM OLARAK bu klasorun baslat-servis.vbs / baslat-stremio.vbs dosyasi mi?
+# (onek eslesmesi yok: <klasor>-v2... baska kuruluma aittir; buyuk/kucuk harf farki onemsiz)
+function Test-Bizim($arg) {
+    $beklenen = @('baslat-servis.vbs', 'baslat-stremio.vbs') | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $root $_)) }
+    foreach ($m in [regex]::Matches($arg, '"([^"]+)"')) {
+        try { $tam = [IO.Path]::GetFullPath($m.Groups[1].Value) } catch { continue }
+        foreach ($b in $beklenen) { if ($tam.Equals($b, [StringComparison]::OrdinalIgnoreCase)) { return $true } }
+    }
+    return $false
+}
+
 function Remove-Kisayol($klasor, $ad) {
     $yol = Join-Path $klasor ($ad + '.lnk')
     if (-not (Test-Path $yol)) { return }
     $arg = $sh.CreateShortcut($yol).Arguments
-    if ($arg.Contains($root)) { Remove-Item $yol -Force; Write-Host "Silindi: $yol" }
+    if (Test-Bizim $arg) { Remove-Item $yol -Force; Write-Host "Silindi: $yol" }
     else { Write-Host "Atlandı (bu klasöre ait değil): $yol" }
 }
 Remove-Kisayol $BaslangicKlasoru 'Stremio Offline Servis'

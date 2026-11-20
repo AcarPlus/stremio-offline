@@ -6,6 +6,19 @@
 param([string]$NodeYolu = '')
 
 $root = $PSScriptRoot
+# Başlatıcı günlüğü (E4): data\baslatici.log; sınamada OFFLINE_DATA_DIR okunur.
+$gunlukKlasoru = if ($env:OFFLINE_DATA_DIR) { $env:OFFLINE_DATA_DIR } else { Join-Path $root 'data' }
+function Yaz-Gunluk($metin) {
+    try {
+        if (-not (Test-Path $gunlukKlasoru)) { New-Item -ItemType Directory -Path $gunlukKlasoru -Force | Out-Null }
+        $f = Join-Path $gunlukKlasoru 'baslatici.log'
+        if ((Test-Path $f) -and (Get-Item $f).Length -gt 1MB) { Remove-Item $f -Force }
+        Add-Content -Path $f -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' [stremio-baslat.ps1] ' + $metin) -Encoding UTF8
+    } catch {}
+}
+# Beklenmeyen hata sessizce kaybolmasın
+trap { Yaz-Gunluk ('HATA: ' + $_.Exception.Message + ' (' + $_.InvocationInfo.PositionMessage.Trim() + ')'); exit 1 }
+
 $port = 11480
 $debugPort = 11481
 try {
@@ -19,9 +32,13 @@ if ($env:OFFLINE_PORT) { $port = [int]$env:OFFLINE_PORT }
 function Test-Url($url) {
     try { Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 2 | Out-Null; return $true } catch { return $false }
 }
-function Show-Mesaj($metin, $dugmeler) {
+# Varsayılan düğme Hayır (Button2) ve pencere her zaman önde (E2): yanlışlıkla Enter'a basınca Stremio kapanmasın.
+function Show-Mesaj($metin, $dugmeler, $varsayilan = 'Button1') {
     Add-Type -AssemblyName System.Windows.Forms
-    return [System.Windows.Forms.MessageBox]::Show($metin, 'Stremio Offline', $dugmeler, 'Question')
+    $sahip = New-Object System.Windows.Forms.Form
+    $sahip.TopMost = $true
+    try { return [System.Windows.Forms.MessageBox]::Show($sahip, $metin, 'Stremio Offline', $dugmeler, 'Question', $varsayilan) }
+    finally { $sahip.Dispose() }
 }
 
 # 1) Servis (çalışıyorsa ikinci örnek zaten sessizce çıkar; yine de gereksiz başlatma yapma).
@@ -30,7 +47,9 @@ if (-not (Test-Url "http://127.0.0.1:$port/manifest.json")) {
     $node = if ($NodeYolu -and (Test-Path $NodeYolu)) { $NodeYolu } elseif (Test-Path $yerelNode) { $yerelNode } else { (Get-Command node -ErrorAction SilentlyContinue).Source }
     if ($node) {
         Start-Process $node -ArgumentList 'server.mjs' -WorkingDirectory $root -WindowStyle Hidden
+        Yaz-Gunluk "servis baslatildi: $node"
     } else {
+        Yaz-Gunluk 'Node.js bulunamadi; servis baslatilamadi.'
         [void](Show-Mesaj 'Node.js bulunamadı; indirme servisi başlatılamadı.' 'OK')
     }
 }
@@ -38,6 +57,7 @@ if (-not (Test-Url "http://127.0.0.1:$port/manifest.json")) {
 # 2) Stremio (sınamada OFFLINE_STREMIO_EXE ile sahte bir program verilebilir)
 $stremio = if ($env:OFFLINE_STREMIO_EXE) { $env:OFFLINE_STREMIO_EXE } else { Join-Path $env:LOCALAPPDATA 'Programs\Stremio\stremio-shell-ng.exe' }
 if (-not (Test-Path $stremio)) {
+    Yaz-Gunluk "Stremio bulunamadi: $stremio"
     [void](Show-Mesaj "Stremio bulunamadı: $stremio" 'OK')
     exit 1
 }
@@ -47,8 +67,9 @@ if ($running) {
     if (Test-Url "http://127.0.0.1:$debugPort/json/version") { exit 0 }   # zaten düğmeli açık
     # Düğmesiz açık. Kapatmak izlenen bir şeyi keser; önce sor.
     $cevap = Show-Mesaj ("Stremio düğmeler olmadan açık.`n`nDüğmelerin gelmesi için Stremio'yu kapatıp yeniden açmam gerekiyor." +
-        "`nŞu an bir şey izliyorsan Hayır de.`n`nKapatıp yeniden açayım mı?") 'YesNo'
-    if ($cevap -ne 'Yes') { exit 0 }
+        "`nŞu an bir şey izliyorsan Hayır de.`n`nKapatıp yeniden açayım mı?") 'YesNo' 'Button2'
+    if ($cevap -ne 'Yes') { Yaz-Gunluk 'Stremio dugmesiz acik; kullanici Hayir dedi, dokunulmadi.'; exit 0 }
+    Yaz-Gunluk 'Stremio dugmesiz acik; kullanici onayiyla kapatilip yeniden aciliyor.'
     Get-Process $procAdi, stremio-runtime -ErrorAction SilentlyContinue | Stop-Process -Force -Confirm:$false
     Start-Sleep -Seconds 2
 }

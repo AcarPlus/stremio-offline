@@ -59,5 +59,24 @@
     return `“${ad}” kütüphaneden kaldırılır ve indirilen dosyalar diskten silinir${boyut}.${dosya} Dosyaları saklamak için aşağıdaki kutuyu işaretle; o zaman yalnızca kayıt kalkar.`
   }
 
-  g.OfflineYardimci = { qualityGroup, qualityRank, qualityLabel, compareQuality, errorText, deleteText }
+  /**
+   * Bölüm bölüm kipinde bir bölümün sürüm seçenekleri arasından varsayılanı seçer (E6): kalite GRUPLA
+   * eşlenir (1226p → 1080p, 4k → 2160p), kaynağı olanlar öne alınır. q: 'auto' ya da bir kalite grubu.
+   * Dizin döner, seçenek yoksa -1.
+   */
+  function pickOption (opts, q) {
+    if (!opts.length) return -1
+    const good = opts.map((o, i) => [o, i]).filter(([o]) => o.seeders > 0)
+    const pool = good.length ? good : opts.map((o, i) => [o, i])
+    const grp = o => qualityGroup(o.quality)
+    if (q !== 'auto') { const m = pool.find(([o]) => grp(o) === q); if (m) return m[1] } else { const m = pool.find(([o]) => grp(o) === '1080p') || pool.find(([o]) => grp(o) === '720p'); if (m) return m[1] }
+    return pool[0][1]
+  }
+
+  /** Seçeneklerdeki kalite grupları (yüksekten düşüğe, bilinmeyen = '?' sonda). */
+  function qualityGroups (opts) {
+    return [...new Set(opts.map(o => qualityGroup(o.quality) || '?'))].sort((a, b) => (a === '?') - (b === '?') || qualityRank(b) - qualityRank(a))
+  }
+
+  g.OfflineYardimci = { qualityGroup, qualityRank, qualityLabel, compareQuality, errorText, deleteText, pickOption, qualityGroups }
 })(typeof globalThis !== 'undefined' ? globalThis : this)

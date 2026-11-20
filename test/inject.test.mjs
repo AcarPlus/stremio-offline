@@ -119,6 +119,15 @@ test('inject: İndirilenler adresi ve film sayfası düğme durumu (D2)', () => 
   const act = saf.downloadButton({ type: 'movie', done: 0, active: 1, doneBytes: 25, sizeBytes: 100 }, 'movie')
   assert.equal(act.state, 'active')
   assert.equal(act.text, '⬇ İniyor %25')
+  // E7: duraklatılmış / yarım kalmış film "İndir" yazmaz
+  const par = saf.downloadButton({ type: 'movie', done: 0, active: 0, partial: 1 }, 'movie')
+  assert.equal(par.state, 'partial')
+  assert.equal(par.text, '⏸ Yarım kaldı')
+  const idx2 = saf.offlineIndex([{ state: 'paused', type: 'movie', imdbId: 'tt1727587', files: [{ idx: 0, selected: true, complete: false, length: 100, doneBytes: 40, videoId: 'tt1727587' }] },
+    { state: 'error', type: 'movie', imdbId: 'tt0000002', files: [] }])
+  assert.equal(saf.downloadButton(idx2.get('tt1727587'), 'movie').state, 'partial')
+  assert.equal(saf.downloadButton(idx2.get('tt0000002'), 'movie').state, 'partial')
+  assert.equal(saf.badgeInfo(idx2.get('tt1727587')), null, 'poster rozeti değişmez')
   const done = saf.downloadButton({ type: 'movie', done: 1, active: 0 }, 'movie')
   assert.equal(done.state, 'done')
   assert.equal(done.text, '✓ İndirildi')
