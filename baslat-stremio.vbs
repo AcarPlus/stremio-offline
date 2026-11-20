@@ -1,4 +1,4 @@
-' "Stremio Offline" kısayolu bunu çalıştırır: konsol penceresi göstermeden stremio-baslat.ps1'i çağırır.
+' "Stremio" kısayolu (masaüstü / Başlat menüsü) bunu çalıştırır: konsol penceresi göstermeden stremio-baslat.ps1'i çağırır.
 ' İsteğe bağlı 1. argüman: node.exe yolu (servisi başlatmak için).
 Option Explicit
 Dim sh, fso, dir, cmd

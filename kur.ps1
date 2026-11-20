@@ -1,41 +1,47 @@
-﻿# Otomatik başlatmayı kurar: yalnızca kullanıcının klasörlerine .lnk kısayolları ekler.
-#   - Başlangıç klasörü : "Stremio Offline Servis"  -> oturum açılınca servisi gizli başlatır
-#   - Masaüstü          : "Stremio Offline"         -> servisi (gerekirse) başlatır, Stremio'yu düğmeli açar
-#   - Başlat menüsü     : "Stremio Offline"         -> aynısı
+﻿# Otomatik başlatmayı kurar: yalnızca kullanıcının klasörlerindeki .lnk kısayollarına dokunur.
+#   - Başlangıç klasörü : "Stremio Offline Servis" -> oturum açılınca servisi gizli başlatır
+#   - Masaüstü + Başlat menüsü: TEK kısayol "Stremio" -> servisi (gerekirse) başlatır, Stremio'yu düğmeli açar.
+#     Stremio'nun kendi "Stremio.lnk"'i varsa yerinde bizim başlatıcıya çevrilir (asıl hali data\kisayol-yedek.json'a
+#     yazılır, kaldir.ps1 geri getirir); yoksa "Stremio.lnk" oluşturulur. Eski "Stremio Offline.lnk"'ler silinir.
+#     Ortak (tüm kullanıcılar) klasörlerine ve görev çubuğuna sabitlenmiş kısayollara dokunulmaz.
+#   - data\kurulum.json: kurulum işareti. Servis bunu görünce kisayol-onar.ps1'i düzenli çalıştırır (Stremio güncellenip
+#     kendi kısayolunu yeniden yazarsa yine başlatıcıya çevrilir).
 # Kayıt defteri, ortam değişkeni, zamanlanmış görev, hizmet, güvenlik duvarı ya da yönetici yetkisi kullanmaz.
-# Geri almak için: kaldir.ps1. Yeniden çalıştırmak güvenlidir (kısayollar üzerine yazılır).
+# Geri almak için: kaldir.ps1. Yeniden çalıştırmak güvenlidir.
 param(
     [string]$BaslangicKlasoru = [Environment]::GetFolderPath('Startup'),
     [string]$MasaustuKlasoru = [Environment]::GetFolderPath('Desktop'),
-    [string]$BaslatMenusuKlasoru = [Environment]::GetFolderPath('Programs')
+    [string]$BaslatMenusuKlasoru = [Environment]::GetFolderPath('Programs'),
+    [string]$VeriKlasoru = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+. (Join-Path $root 'ortak.ps1')
+$veri = if ($VeriKlasoru) { [IO.Path]::GetFullPath($VeriKlasoru) } else { Get-VeriKlasoru $root }
 
-# Önce paketle gelen taşınabilir Node (node\node.exe), yoksa PATH'teki node.
-$yerelNode = Join-Path $root 'node\node.exe'
-$node = if (Test-Path $yerelNode) { $yerelNode } else { (Get-Command node -ErrorAction SilentlyContinue).Source }
+$node = Find-Node $root
 if (-not $node) { throw 'Node.js bulunamadı (node\node.exe yok ve node komutu PATH içinde değil).' }
-$wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
-$stremio = Join-Path $env:LOCALAPPDATA 'Programs\Stremio\stremio-shell-ng.exe'
-$simge = if (Test-Path $stremio) { "$stremio,0" } else { "$env:SystemRoot\System32\shell32.dll,175" }
+$stremio = Get-StremioExe
+$simge = Get-KisayolSimgesi $stremio
+if (-not (Test-Path -LiteralPath $stremio)) { Write-Warning "Stremio bulunamadı ($stremio); kısayollar yine de oluşturuluyor." }
 
-function New-Kisayol($klasor, $ad, $vbs, $aciklama) {
-    if (-not (Test-Path $klasor)) { throw "Klasör yok: $klasor" }
-    $yol = Join-Path $klasor ($ad + '.lnk')
-    $sh = New-Object -ComObject WScript.Shell
-    $k = $sh.CreateShortcut($yol)
-    $k.TargetPath = $wscript
-    $k.Arguments = "//B //Nologo `"$(Join-Path $root $vbs)`" `"$node`""
-    $k.WorkingDirectory = $root
-    $k.WindowStyle = 7
-    $k.Description = $aciklama
-    $k.IconLocation = $simge
-    $k.Save()
-    Write-Host "Oluşturuldu: $yol"
-}
+# 1) Başlangıç: servis
+if (-not (Test-Path -LiteralPath $BaslangicKlasoru)) { throw "Klasör yok: $BaslangicKlasoru" }
+$servisLnk = Join-Path $BaslangicKlasoru 'Stremio Offline Servis.lnk'
+Set-BizimKisayol $servisLnk $root 'baslat-servis.vbs' $node 'Offline İndir servisini oturum açılırken gizli başlatır' $simge
+Write-Host "Oluşturuldu: $servisLnk"
 
-New-Kisayol $BaslangicKlasoru 'Stremio Offline Servis' 'baslat-servis.vbs' 'Offline İndir servisini oturum açılırken gizli başlatır'
-New-Kisayol $MasaustuKlasoru 'Stremio Offline' 'baslat-stremio.vbs' "Stremio'yu Offline İndir düğmeleriyle aç"
-New-Kisayol $BaslatMenusuKlasoru 'Stremio Offline' 'baslat-stremio.vbs' "Stremio'yu Offline İndir düğmeleriyle aç"
-Write-Host 'Kuruldu. Bir sonraki oturum açılışında servis kendiliğinden başlar; Stremio için "Stremio Offline" kısayoluna tıkla.'
+# 2) Tek "Stremio" kısayolu (masaüstü + Başlat menüsü)
+$sonuc = Invoke-StremioKisayolDuzeni $root $node $stremio $MasaustuKlasoru $BaslatMenusuKlasoru $veri -Olustur
+$sonuc.degisiklikler + $sonuc.atlananlar | ForEach-Object { Write-Host $_ }
+Remove-EskiKisayollar $root @($MasaustuKlasoru, $BaslatMenusuKlasoru) | ForEach-Object { Write-Host $_ }
+
+# 3) Kurulum işareti (kisayol-onar.ps1 yalnız bu varsa çalışır)
+Write-JsonDosya (Join-Path $veri $script:KurulumDosyasi) ([ordered]@{
+    surum = 1
+    kuruldu = (Get-Date).ToString('o')
+    kok = $root
+    node = $node
+    klasorler = [ordered]@{ baslangic = $BaslangicKlasoru; masaustu = $MasaustuKlasoru; baslatMenusu = $BaslatMenusuKlasoru }
+})
+Write-Host 'Kuruldu. Bir sonraki oturum açılışında servis kendiliğinden başlar; Stremio için "Stremio" kısayoluna tıkla.'
