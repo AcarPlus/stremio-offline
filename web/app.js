@@ -251,6 +251,41 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     onSet: v => post('/api/settings', { priorityThrottle: v }),
     okText: v => v > 0 ? 'Öncelik varken diğer indirmeler: ' + fmtLimit(v) : 'Öncelik diğer indirmeleri kısmaz'
   })
+  // İndirme klasörü: yalnız yeni indirmelere uygulanır; süren ve biten indirmeler eski yerinde kalır
+  const klasorYol = h('code', { class: 'klasorYol' }, '—')
+  const klasorDugme = h('button', { type: 'button', class: 'dugme kucuk gri' }, 'Değiştir')
+  const klasorElle = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Klasör yolunu elle yaz' }, 'Elle yaz')
+  const klasorGiris = h('input', { type: 'text', class: 'klasorGiris', autocomplete: 'off', spellcheck: 'false', placeholder: 'D:\\Filmler', 'aria-label': 'İndirme klasörü yolu', hidden: true })
+  const klasorUygula = h('button', { type: 'button', class: 'dugme kucuk', hidden: true }, 'Uygula')
+  let klasorSimdi = ''
+  async function klasorUygulaYol (yol) {
+    try {
+      const r = await post('/api/settings', { downloadDir: yol })
+      klasorSimdi = r.downloadDir; klasorYol.textContent = klasorSimdi; klasorYol.title = klasorSimdi
+      klasorGiris.hidden = true; klasorUygula.hidden = true
+      toast('Yeni indirmeler şuraya inecek: ' + klasorSimdi + ' (süren ve biten indirmeler eski yerinde kalır)', 'ok')
+      await tick()
+    } catch (e) { toast(e.message, 'hata') }
+  }
+  function klasorGirisAc () {
+    klasorGiris.hidden = false; klasorUygula.hidden = false
+    if (!klasorGiris.value) klasorGiris.value = klasorSimdi
+    klasorGiris.focus(); klasorGiris.select()
+  }
+  klasorElle.addEventListener('click', () => { if (klasorGiris.hidden) klasorGirisAc(); else { klasorGiris.hidden = true; klasorUygula.hidden = true } })
+  klasorUygula.addEventListener('click', () => klasorUygulaYol(klasorGiris.value))
+  klasorGiris.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); klasorUygulaYol(klasorGiris.value) } })
+  klasorDugme.addEventListener('click', async () => {
+    klasorDugme.disabled = true
+    try {
+      const r = await post('/api/klasor-sec')
+      if (r.path) await klasorUygulaYol(r.path)
+    } catch (e) { toast(e.message + ' — yolu "Elle yaz" ile girebilirsin.', 'hata'); klasorGirisAc() } finally { klasorDugme.disabled = false }
+  })
+  const klasorAyar = h('div', { class: 'araclar klasorSatiri' },
+    h('span', { class: 'sinirEtiket' }, 'İndirme klasörü:'), klasorYol, klasorDugme, klasorElle, klasorGiris, klasorUygula,
+    h('span', { class: 'soluk klasorNot' }, 'Yeni indirmeler için; süren ve biten indirmeler eski yerinde kalır.'))
+
   const sinirAyar = h('div', { class: 'araclar sinirlar' },
     h('span', { class: 'sinirEtiket' }, 'Yeni indirmeler için hız sınırı', varsayilan.el), hepsine,
     h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el),
@@ -265,6 +300,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       h('div', null, strip.bos, h('span', null, 'Diskte boş alan')),
       h('div', null, strip.hiz, h('span', null, 'Toplam hız')),
       h('div', null, strip.aktif, h('span', null, 'Etkin indirme'))),
+    klasorAyar,
     sinirAyar,
     h('div', { class: 'suzgec' }, chips),
     list, bos)
@@ -294,6 +330,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     set(strip.bos, s.diskFreeBytes != null ? fmtBytes(s.diskFreeBytes) : '—')
     set(strip.hiz, fmtSpeed(s.downloadSpeed))
     set(strip.aktif, String(s.active))
+    if (s.downloadDir && s.downloadDir !== klasorSimdi) { klasorSimdi = s.downloadDir; klasorYol.textContent = klasorSimdi; klasorYol.title = klasorSimdi }
     if (s.settings) { varsayilan.set(s.settings.defaultDownloadLimit); yukleme.set(s.settings.uploadLimit); kisma.set(s.settings.priorityThrottle) }
     motorUyari.hidden = !s.engine || s.engine.ready !== false ? true : false
     if (s.engine && s.engine.ready === false && s.engine.error) motorUyari.textContent = 'İndirme motoru hazır değil: ' + s.engine.error
