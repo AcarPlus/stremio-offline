@@ -20,7 +20,9 @@ describe('sınır ve ayar doğrulaması', () => {
     for (const bad of [
       { defaultDownloadLimit: 123456, uploadLimit: -1 },
       { defaultDownloadLimit: 123456, priorityThrottle: 'abc', applyToAll: true },
-      { uploadLimit: 60000, defaultDownloadLimit: 500 }
+      { uploadLimit: 60000, defaultDownloadLimit: 500 },
+      { maxConcurrent: 2, scheduleStart: '7:00' },
+      { showBadges: false, clipSeconds: 45 }
     ]) {
       await assert.rejects(svc.api('POST', '/api/settings', bad), e => e.status === 400, JSON.stringify(bad))
       assert.deepEqual(await svc.api('GET', '/api/settings'), s0, 'ayarlar değişmedi: ' + JSON.stringify(bad))
@@ -29,7 +31,8 @@ describe('sınır ve ayar doğrulaması', () => {
     assert.equal((await svc.item(ih)).downloadLimit, 2000000, 'applyToAll uygulanmadı')
     // Hepsi geçerliyse hepsi uygulanır
     const s1 = await svc.api('POST', '/api/settings', { defaultDownloadLimit: 123456, uploadLimit: 0, priorityThrottle: 1000 })
-    assert.deepEqual(s1, { defaultDownloadLimit: 123456, uploadLimit: 0, priorityThrottle: 1000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
+    assert.deepEqual({ defaultDownloadLimit: s1.defaultDownloadLimit, uploadLimit: s1.uploadLimit, priorityThrottle: s1.priorityThrottle, downloadDir: s1.downloadDir, autoUpdateCheck: s1.autoUpdateCheck },
+      { defaultDownloadLimit: 123456, uploadLimit: 0, priorityThrottle: 1000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
     assert.equal(JSON.parse(fs.readFileSync(file(), 'utf8')).defaultDownloadLimit, 123456)
   })
 

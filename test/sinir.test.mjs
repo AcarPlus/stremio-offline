@@ -15,6 +15,9 @@ after(() => { killAll() })
 const mib = n => (n / MiB).toFixed(2) + ' MiB/s'
 const engineLimits = async (svc, ih) => rq((await engineOf(svc, ih)).base, 'GET', '/torrents/limits')
 
+// Genel ayarlar (Ayarlar sayfası) kurallar.test.mjs'de; burada yalnız hız sınırı alanları karşılaştırılır
+const eski = s => ({ defaultDownloadLimit: s.defaultDownloadLimit, uploadLimit: s.uploadLimit, priorityThrottle: s.priorityThrottle, downloadDir: s.downloadDir, autoUpdateCheck: s.autoUpdateCheck })
+
 describe('indirme başına hız sınırı', () => {
   // Varsayılan sınır harness'tan 4 MiB/s (OFFLINE_RATELIMIT_DOWN); yükleme sınırı varsayılanı 100 KB/sn.
   const sc = serviceConfig(6)
@@ -82,9 +85,9 @@ describe('indirme başına hız sınırı', () => {
   test('ayarlar: varsayılan sınır, yükleme sınırı (bütün süreçlere), hepsine uygula; kalıcı', async () => {
     const pack = fx.pack.infoHash
     const s0 = await svc.api('GET', '/api/settings')
-    assert.deepEqual(s0, { defaultDownloadLimit: 4 * MiB, uploadLimit: 100000, priorityThrottle: 200000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
+    assert.deepEqual(eski(s0), { defaultDownloadLimit: 4 * MiB, uploadLimit: 100000, priorityThrottle: 200000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
     const s1 = await svc.api('POST', '/api/settings', { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000 })
-    assert.deepEqual(s1, { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
+    assert.deepEqual(eski(s1), { defaultDownloadLimit: 2 * MiB, uploadLimit: 50000, priorityThrottle: 200000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
     // Yükleme sınırı çalışan süreçlere hemen; indirme sınırı (kayıtlı) değişmez
     assert.deepEqual(await engineLimits(svc, pack), { download_bps: MiB / 2, upload_bps: 50000 })
     assert.equal((await svc.api('GET', '/api/status')).settings.uploadLimit, 50000)
