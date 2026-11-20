@@ -149,7 +149,7 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
 
 ### Başlık arama (Faz 2)
 - `GET /api/search?q=breaking%20bad` → `{ q, results: [{ type: "movie"|"series", id: "tt…", name, year, poster }] }`. Cinemeta'nın herkese açık arama kataloğunu (`v3-cinemeta.strem.io/catalog/<tür>/top/search=…`) film ve dizi için sorar; adında arama sözcüğü geçenler öne alınır, türü başına en çok 15 sonuç, 5 dk önbellek. `q` en az 2 karakter (`400`). İnternet yoksa `502`. `poster` uzak adrestir (çevrimdışıyken görünmez).
-- `GET /api/title?type=series&id=tt0903747` → `{ type, id, name, year, poster, description, seasons: [{ season, episodes }] }`. Sezon seçiciye giden sezon listesi (0 = özel bölümler). Cinemeta'ya gider (`502` alınamazsa).
+- `GET /api/title?type=series&id=tt0903747` → `{ type, id, name, year, poster, description, runtime, seasons: [{ season, episodes }] }`. Sezon seçiciye giden sezon listesi (0 = özel bölümler). `runtime`: Cinemeta'nın süre metni ("2h 10min", "130 min"; dizide bölüm süresi; yoksa `""`), sürüm seçicinin kalite rozeti için. Cinemeta'ya gider (`502` alınamazsa).
 
 ### Oynatma
 - `GET /play/:type/:id/:infoHash/:fileIdx` (`fileIdx` bilinmiyorsa `x`). Stremio'nun kayıtlı adresleriyle aynı biçim.
@@ -179,6 +179,18 @@ Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`in
 | `/#/dizi/<tt…>` | Dizinin sezon listesi |
 | `/#/surum/movie/<tt…>`, `/#/surum/series/<tt…:sezon:bölüm>` | Sürüm seçici (film ya da tek bölüm) |
 | `/#/sezon/<tt…>/<sezon>` | Sezon seçici (paket ya da bölüm bölüm) |
+
+### Sürüm seçicide kalite rozeti
+Her sürüm satırında indirmeden **tahmini ortalama bit hızı** (Mbps) gösterilir: Torrentio'nun bildirdiği boyut ÷ Cinemeta süresi (`/api/title` → `runtime`). Saf hesap `web/yardimci.js` (`parseRuntime`, `qualityBadge`, `techTags`; sınama `test/rozet.test.mjs`). Süre yoksa, sürüm sezon paketinden geliyorsa (`kind: pack`, boyut tüm paketin olabilir) ya da sonuç 120 Mbps'i aşıyorsa (koleksiyon boyutu) rozet yok. Renk, kalite grubuna göre (ses dahil ortalama; H.264 eşikleri, **HEVC/AV1'de ×0,6**):
+
+| Kalite | düşük (kırmızı) | orta (sarı) | iyi (yeşil) |
+|---|---|---|---|
+| 2160p | < 12 | 12–25 | > 25 |
+| 1080p | < 4 | 4–8 | > 8 |
+| 720p | < 2 | 2–4 | > 4 |
+| 480p | < 1 | 1–2 | > 2 |
+
+Kalite bilinmiyorsa değer renksiz gösterilir. Yanında addan okunan etiketler: video codec (AV1, HEVC, AVC), HDR (DV, HDR10+, HDR), 10bit, ses (Atmos, TrueHD, DTS:X, DTS-HD, DTS, DDP, DD, AAC, FLAC, Opus) ve Torrentio etiketleri (REMUX, CAM). Bit hızı yalnız tahmindir: aynı bit hızında kaynak (BluRay/WEB) ve kodlayıcı kalitesi farkı görünmez; bunun için "Klip".
 
 ### Gömülü kip ve ana pencere ile haberleşme
 Sayfa `?embed=1` ile açılırsa (ör. `http://127.0.0.1:11480/?embed=1#/surum/movie/tt1727587`) iframe içinde kullanılmak üzere sıkı üst çubuk gösterir, görünür bir "Kapat" düğmesi ve Esc ile kapatma sunar; "oynat" bir adrese gitmek yerine ana pencereye ileti yollar. Gönderim `window.parent.postMessage(ileti, hedefKöken)` iledir; hedef köken, tarayıcı bildirirse doğrudan üst pencerenin kökenidir (`location.ancestorOrigins[0]`), yoksa `*`. Tüm iletilerde `source: 'offline-indir'` vardır; ana pencere bunu ve `event.origin`'i (servis kökeni) denetlemelidir.

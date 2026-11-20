@@ -129,6 +129,7 @@ function onayla ({ baslik, metin, tamam = 'Tamam', tik = null }) {
 }
 
 const { qualityGroup, qualityRank: QUALITY_RANK, qualityLabel, compareQuality, errorText, deleteText, pickOption, qualityGroups } = OfflineYardimci // web/yardimci.js
+const { parseRuntime, qualityBadge, techTags } = OfflineYardimci // kalite rozeti
 const LANG = { gb: 'İngilizce', us: 'İngilizce', tr: 'Türkçe', ru: 'Rusça', ua: 'Ukraynaca', fr: 'Fransızca', de: 'Almanca', es: 'İspanyolca', mx: 'İspanyolca', it: 'İtalyanca', pt: 'Portekizce', br: 'Portekizce', jp: 'Japonca', kr: 'Korece', cn: 'Çince', pl: 'Lehçe', nl: 'Felemenkçe', se: 'İsveççe', gr: 'Yunanca', in: 'Hintçe', sa: 'Arapça', cz: 'Çekçe', hu: 'Macarca', ro: 'Romence', th: 'Tayca' }
 const langName = c => LANG[c] || c.toUpperCase()
 const STATE_TR = { resolving: 'Bilgi alınıyor', downloading: 'İniyor', paused: 'Duraklatıldı', completed: 'Hazır', error: 'Hata' }
@@ -547,7 +548,12 @@ async function viewSurum (root, type, id, current) {
   const bant = h('div'); bant.append(baslikBandi(null, ep))
   const govde = h('div')
   root.append(geri, bant, govde, yukleniyor('Sürümler Torrentio’dan getiriliyor…'))
-  api(`/api/title?type=${type}&id=${imdb}`).then(t => { if (current()) bant.replaceChildren(baslikBandi(t, ep)) }).catch(() => {})
+  let sureDk = null; let yeniden = null // kalite rozeti: Cinemeta süresi (dk); gelince satırlar yeniden çizilir
+  api(`/api/title?type=${type}&id=${imdb}`).then(t => {
+    if (!current()) return
+    bant.replaceChildren(baslikBandi(t, ep))
+    sureDk = parseRuntime(t.runtime); if (sureDk && yeniden) yeniden()
+  }).catch(() => {})
 
   let data
   const yukle = async () => {
@@ -609,12 +615,15 @@ async function viewSurum (root, type, id, current) {
       tbody.replaceChildren(...(l.length ? rows : [h('tr', null, h('td', { colspan: '7' }, 'Bu süzgece uyan sürüm yok.'))]))
     }
     ciz()
+    yeniden = ciz
 
     function satir (v) {
       const play = () => `${location.origin}/play/${type}/${id}/${v.infoHash}/${v.fileIdx ?? 'x'}`
       const td = (et, cls, ...k) => h('td', { 'data-et': et, class: cls }, ...k)
       const lang = (v.languages || []).map(c => h('span', { class: 'etiket', title: c.toUpperCase() }, langName(c)))
-      const tags = [...(v.languageTags || []), ...(v.tags || [])].slice(0, 5).map(t => h('span', { class: 'etiket' }, t))
+      const rz = qualityBadge(v, sureDk)
+      const tags = [rz ? h('span', { class: 'rozet ' + (rz.level || ''), title: rz.title }, rz.text) : null,
+        ...[...(v.languageTags || []), ...techTags(v)].slice(0, 8).map(t => h('span', { class: 'etiket' }, t))]
       const eylem = h('td', { class: 'islem' })
       const doldur = () => {
         const lib = v.library
