@@ -22,6 +22,7 @@ import { Addon } from './lib/addon.mjs'
 import { Api } from './lib/api.mjs'
 import { servePlay } from './lib/play.mjs'
 import { startInjector } from './lib/inject.mjs'
+import { Kapatma } from './lib/kapat.mjs'
 
 // Yakalanmamış hata servisi kapatmaz: günlüğe yazılır, servis sürer.
 // Ayrıca stderr'e de yazılır: başlatıcı (baslat-servis.vbs) stderr'i data\baslatici.log'a ekler, açılışta çökme görünür kalır (E4).
@@ -44,7 +45,7 @@ if (await alreadyRunning(cfg)) process.exit(0)
 setLogFile(path.join(cfg.dataDir, 'servis.log'))
 // Kütüphane, ayarlar, motor havuzu ve yöneticiler kapı alındıktan SONRA kurulur (init, listen geri çağrısında):
 // yarışı kaybeden örnek, kazananın dosyalarına (library.json, pid dosyaları) hiç dokunmadan çıkar (E9).
-let library, settings, meta, manager, pool, torrentio, addon, api
+let library, settings, meta, manager, pool, torrentio, addon, api, kapat
 function init () {
   library = new Library(cfg.libFile).load()
   // Tek motorlu eski düzenden geçiş (bir kez; eski oturum klasörü yedeklenir, silinmez)
@@ -59,7 +60,9 @@ function init () {
   manager = new Manager({ cfg, pool, library, meta, settings })
   torrentio = new Torrentio(cfg, meta)
   addon = new Addon({ cfg, manager, torrentio, meta })
-  api = new Api({ cfg, manager, torrentio })
+  kapat = new Kapatma({ cfg, manager })
+  kapat.start()
+  api = new Api({ cfg, manager, torrentio, kapat })
 }
 
 const CORS = {
@@ -205,6 +208,7 @@ function shutdown (code = 0) {
   log('servis kapanıyor')
   try { stopInjector?.() } catch {}
   try { manager.stop() } catch {}
+  try { kapat.stop() } catch {}
   try { pool.stopAll() } catch {}
   try { server.close() } catch {}
   setTimeout(() => process.exit(code), 300)

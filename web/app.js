@@ -286,6 +286,37 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     h('span', { class: 'sinirEtiket' }, 'İndirme klasörü:'), klasorYol, klasorDugme, klasorElle, klasorGiris, klasorUygula,
     h('span', { class: 'soluk klasorNot' }, 'Yeni indirmeler için; süren ve biten indirmeler eski yerinde kalır.'))
 
+  // Hepsi bitince bilgisayarı kapat: bellekte (kalıcı değil), tetiklenince kendini kapatır; Windows 60 sn geri sayım yapar
+  const kapatTik = h('input', { type: 'checkbox', id: 'kapatTik' })
+  const kapatMetin = h('span', { class: 'soluk' })
+  const kapatIptal = h('button', { type: 'button', class: 'dugme kucuk tehlike', hidden: true }, 'İptal')
+  const kapatKutu = h('div', { class: 'araclar kapatSatiri', role: 'group', 'aria-label': 'Bilgisayarı kapatma' },
+    h('label', { for: 'kapatTik', class: 'sinirEtiket' }, kapatTik, 'Hepsi bitince bilgisayarı kapat'), kapatMetin, kapatIptal)
+  let kapatKilit = false
+  function setKapat (k) {
+    if (kapatKilit) return
+    kapatTik.checked = !!(k.armed || k.countdown)
+    kapatTik.disabled = !!k.countdown
+    kapatIptal.hidden = !(k.countdown || k.armed)
+    kapatKutu.classList.toggle('uyarili', !!k.countdown)
+    if (k.countdown) kapatMetin.textContent = 'Bilgisayar ' + k.secondsLeft + ' sn içinde kapanacak' + (k.simulated ? ' (sınama: gerçekten kapanmaz)' : '') + '.'
+    else if (k.armed) kapatMetin.textContent = 'Etkin indirmeler (' + k.active + ') bitince bilgisayar kapanacak (60 sn geri sayımla; iptal edebilirsin).'
+    else kapatMetin.textContent = k.message || ''
+  }
+  async function kapatGonder (enabled) {
+    kapatKilit = true
+    try { setKapat(await post('/api/kapat-zamanla', { enabled })); if (!enabled) toast('Kapatma iptal edildi.', 'ok') } catch (e) { toast(e.message, 'hata') } finally { kapatKilit = false }
+    try { setKapat(await api('/api/kapat-zamanla')) } catch {}
+  }
+  kapatTik.addEventListener('change', async () => {
+    if (kapatTik.checked) {
+      const r = await onayla({ baslik: 'İndirmeler bitince bilgisayar kapansın mı?', metin: 'Etkin bütün indirmeler tamamlanınca Windows 60 saniyelik geri sayımla bilgisayarı kapatır; bu süre içinde İptal edebilirsin. Kaydedilmemiş işlerin varsa kaydet. Bu ayar kalıcı değildir (servis yeniden başlayınca kapanır).', tamam: 'Aç' })
+      if (!r.ok) { kapatTik.checked = false; return }
+    }
+    await kapatGonder(kapatTik.checked)
+  })
+  kapatIptal.addEventListener('click', () => kapatGonder(false))
+
   const sinirAyar = h('div', { class: 'araclar sinirlar' },
     h('span', { class: 'sinirEtiket' }, 'Yeni indirmeler için hız sınırı', varsayilan.el), hepsine,
     h('span', { class: 'sinirEtiket' }, 'Yükleme sınırı', yukleme.el),
@@ -301,6 +332,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       h('div', null, strip.hiz, h('span', null, 'Toplam hız')),
       h('div', null, strip.aktif, h('span', null, 'Etkin indirme'))),
     klasorAyar,
+    kapatKutu,
     sinirAyar,
     h('div', { class: 'suzgec' }, chips),
     list, bos)
@@ -498,6 +530,7 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       if (stopped || !current()) return
       fails = 0; baglanti.hidden = true
       setSummary(r.summary); sync(r.items)
+      try { setKapat(await api('/api/kapat-zamanla')) } catch {}
     } catch { fails++; if (fails >= 2) baglanti.hidden = false } finally { busy = false }
   }
   const loop = () => { if (stopped) return; tick().finally(() => { timer = setTimeout(loop, document.hidden ? 5000 : 1000) }) }

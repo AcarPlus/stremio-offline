@@ -161,6 +161,16 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - Değilse motorun akışından sunulur: `Range` desteklenir, inmemiş bir yere atlamak o bölgeyi öne alır. Öğe kütüphanede yoksa yalnızca son 6 saatte bir Torrentio listesinde görülmüş hash için oluşturulur (başka hash için `404`, indirme başlamaz); duraklatılmışsa sürdürülür, dosya seçili değilse seçime eklenir (Stremio'daki "İndir+Oynat" davranışı).
   - `HEAD` desteklenir; aralık dışı `416`. Yanıtta `Accept-Ranges: bytes`, `Content-Type` uzantıya göre.
 
+### Bilgisayarı kapatma zamanlayıcısı
+(`POST /api/kapat` **servisi** kapatır; bu uç **bilgisayarı**. Yalnızca servisin kendi sayfasından / kaynaksız yerel istek; Stremio kökeni `POST` yapamaz.)
+- `GET /api/kapat-zamanla` → `{ armed, countdown, phase: "kapali" | "bekliyor" | "geri-sayim", secondsLeft, endsAt, active, simulated, message }`.
+- `POST /api/kapat-zamanla` gövde `{ "enabled": true | false }` (boolean zorunlu, aksi `400`) → aynı durum. **Bellekte tutulur, kalıcı değildir** (servis yeniden başlayınca kapalı); tetiklenince kendini kapatır.
+  - `true`: **etkin (`resolving`/`downloading`) indirme yoksa `409`** (karar: böyle bir anahtar ya hemen kapatır ya da haftalarca gizlice bekler; ikisi de sürpriz). Etkin indirme varken açılır.
+  - Tetikleme: açıldıktan sonra etkin indirme kalmayınca (2 ardışık denetim, `OFFLINE_KAPAT_KONTROL_MS`, vars. 2 sn) **ve açıldıktan sonra en az bir indirme tamamlanmışsa**. Duraklatılmış/hatalı öğeler beklenmez. Hiçbiri tamamlanmadan etkin indirme kalmazsa (hepsi duraklatıldı/iptal/hata) bilgisayar kapatılmaz, anahtar kendiliğinden kapanır (`message` açıklar).
+  - Tetiklenince `shutdown.exe /s /t 60 /c "Stremio Offline: indirmeler bitti…"` çalışır (Windows'un kendi geri sayımı); `phase: "geri-sayim"`, `secondsLeft`. Komut başarısızsa bilgisayar kapanmaz, `message` söyler.
+  - `false`: zamanlamayı kapatır; geri sayım sürüyorsa `shutdown.exe /a` ile iptal eder (iptal edilemezse `502`; elle `shutdown /a`).
+  - **Güvenlik:** gerçek `shutdown.exe`'ye yalnız sınama kipi DEĞİLken ve `OFFLINE_KAPATMA_KOMUTU` verilmemişken gidilir. `OFFLINE_KAPATMA_KOMUTU` bir program/betik yoludur (`.mjs/.js` node ile), aynı bağımsız değişkenlerle (`/s /t 60 /c …`, `/a`) çalışır. Sınama kipinde (`OFFLINE_DATA_DIR`) değişken yoksa **hiçbir program çalışmaz**: yalnız günlüğe yazılır, `simulated: true` sahte geri sayım görünür.
+
 ### Eski uçlar (inject.js ve eski panel için korunur)
 - `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
 - `POST /api/download` gövde `{ type, id, infoHash, fileIdx, trackers, title, fileName }` → `{ ok, state, message, item }`. Zaten varsa: tamamlandıysa "Zaten indirilmiş", duraklatılmış/hatalıysa sürdürür, iniyorsa "Zaten iniyor (%x)".
@@ -232,6 +242,7 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 |---|---|
 | `OFFLINE_DATA_DIR` | Veri klasörü. Verilirse kökteki `config.json` **okunmaz/yazılmaz**, indirme klasörü varsayılanı `<veri>/indirilenler` olur. Sınama kipinde gerçek servisin kapı aralığına girilmesin diye `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT`, `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE` **zorunludur** (eksikse servis hata verip açılmaz). |
 | `OFFLINE_DOWNLOAD_DIR` | İndirme klasörünün ilk değeri (arayüzden kaydedilen klasör bundan önceliklidir) |
+| `OFFLINE_KAPATMA_KOMUTU`, `OFFLINE_KAPAT_KONTROL_MS` | Bilgisayarı kapatma programı (sınama kipinde yoksa hiçbir şey çalışmaz) ve denetim aralığı |
 | `OFFLINE_KLASOR_SECICI` | `POST /api/klasor-sec` için sahte program (sınama kipinde yoksa pencere hiç açılmaz) |
 | `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT` | Kapılar |
 | `OFFLINE_PEER_LISTEN_IP` | `peerListenIp` (boş = rqbit varsayılanı) |
