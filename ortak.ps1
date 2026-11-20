@@ -115,6 +115,10 @@ function Set-BizimKisayol($yol, $kok, $vbs, $node, $aciklama, $simge) {
     $k.Description = $aciklama
     if ($simge) { $k.IconLocation = $simge }
     $k.Save()
+    # "Stremio" kısayolu: Stremio penceresiyle aynı görev çubuğu kimliği (tek düğme; sabitleme bizim başlatıcıyı tutar)
+    if ($vbs -eq 'baslat-stremio.vbs' -and $env:OFFLINE_AUMID -ne '0') {
+        try { Set-KisayolAumid $yol } catch { Write-Warning "gorev cubugu kimligi yazilamadi: $yol ($($_.Exception.Message))" }
+    }
 }
 
 # Bizim kısayol beklenenden farklı mı (başka node yolu, eski Stremio simgesi...)? $simge $null ise simgeye bakılmaz.
@@ -124,6 +128,9 @@ function Test-BizimGuncel($yol, $kok, $vbs, $node, $simge) {
     if ($b.Arguments -ine (Get-BizimArgumanlar $kok $vbs $node)) { return $false }
     if ($b.WorkingDirectory -ine $kok) { return $false }
     if ($simge -and $b.IconLocation -ine $simge) { return $false }
+    if ($vbs -eq 'baslat-stremio.vbs' -and $env:OFFLINE_AUMID -ne '0') {
+        try { if ((Get-KisayolAumid $yol) -ne $script:StremioAumid) { return $false } } catch {}
+    }
     return $true
 }
 
@@ -152,8 +159,97 @@ function Set-YedekKaydi($liste, $yol, $bizimOlusturdu, $asil) {
 
 # Stremio kısayolu adayları: masaüstü\Stremio.lnk, Başlat menüsü\Stremio.lnk ve (varsa) Başlat menüsü\Stremio\Stremio.lnk.
 # Görev çubuğuna sabitlenmiş kısayollara (User Pinned\TaskBar) bilerek dokunulmaz.
-function Get-StremioKisayolAdaylari($masaustu, $menu) {
+# ---- Görev çubuğu kimliği (AppUserModelID) ----
+# Stremio penceresine ve bizim "Stremio" kısayollarımıza aynı kimlik yazılır: görev çubuğunda tek düğme olur ve
+# açık pencere "Görev çubuğuna sabitle" ile sabitlenince Windows doğrudan stremio-shell-ng.exe'yi değil, pencerenin
+# RelaunchCommand'ını (bizim başlatıcı) sabitler; sabitten açınca düğmeler gelir.
+$script:StremioAumid = 'StremioOffline.Stremio'
+function Add-AumidTipi {
+    if ('StremioOfflineAumid' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+public static class StremioOfflineAumid {
+    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct PK { public Guid f; public uint p; }
+    [StructLayout(LayoutKind.Explicit)] public struct PV { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public IntPtr p; [FieldOffset(8)] public long pad; }
+    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPS {
+        [PreserveSig] int GetCount(out uint c);
+        [PreserveSig] int GetAt(uint i, out PK k);
+        [PreserveSig] int GetValue(ref PK k, out PV v);
+        [PreserveSig] int SetValue(ref PK k, ref PV v);
+        [PreserveSig] int Commit();
+    }
+    [ComImport, Guid("00021401-0000-0000-C000-000000000046")] class CShellLink { }
+    [DllImport("shell32.dll")] static extern int SHGetPropertyStoreForWindow(IntPtr h, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IPS ps);
+    static PK Anahtar(uint pid) { return new PK { f = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), p = pid }; }
+    static IPS Depo(IntPtr h) {
+        Guid iid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"); IPS ps;
+        int hr = SHGetPropertyStoreForWindow(h, ref iid, out ps);
+        if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+        return ps;
+    }
+    // pid: 5 ID, 2 RelaunchCommand, 3 RelaunchIconResource, 4 RelaunchDisplayNameResource
+    static void Yaz(IPS ps, uint pid, string deger) {
+        var k = Anahtar(pid);
+        var v = new PV(); // deger null: VT_EMPTY (özellik silinir)
+        if (deger != null) { v.vt = 31; v.p = Marshal.StringToCoTaskMemUni(deger); }
+        try { int hr = ps.SetValue(ref k, ref v); if (hr != 0) Marshal.ThrowExceptionForHR(hr); } finally { if (v.p != IntPtr.Zero) Marshal.FreeCoTaskMem(v.p); }
+    }
+    static string Oku(IPS ps, uint pid) {
+        var k = Anahtar(pid); PV v;
+        if (ps.GetValue(ref k, out v) != 0 || v.vt != 31) return null;
+        return Marshal.PtrToStringUni(v.p);
+    }
+    public static void Pencere(IntPtr hwnd, string id, string komut, string simge, string ad) {
+        var ps = Depo(hwnd);
+        // Relaunch* alanları kimlikten ÖNCE yazılır (kimlik yazılınca görev çubuğu hepsini birlikte okur)
+        Yaz(ps, 2, komut); Yaz(ps, 3, simge); Yaz(ps, 4, ad); Yaz(ps, 5, id);
+        ps.Commit();
+    }
+    // Tanı/sınama için: pencerenin kimliği (yoksa null)
+    public static string PencereOku(IntPtr hwnd) {
+        Guid iid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"); IPS ps;
+        if (SHGetPropertyStoreForWindow(hwnd, ref iid, out ps) != 0) return null;
+        var k = new PK { f = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), p = 5 };
+        uint c; ps.GetCount(out c);
+        PV r; int g = ps.GetValue(ref k, out r);
+        return g == 0 && r.vt == 31 ? Marshal.PtrToStringUni(r.p) : null;
+    }
+    public static void Kisayol(string yol, string id) {
+        var link = new CShellLink();
+        ((IPersistFile)link).Load(yol, 2);
+        var ps = (IPS)link;
+        Yaz(ps, 5, id);
+        int hr = ps.Commit(); if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+        ((IPersistFile)link).Save(yol, true);
+    }
+}
+'@
+}
+# $kaldir: kimliği siler (kaldir.ps1 Stremio'nun asıl kısayolunu geri getirirken)
+function Set-KisayolAumid($yol, [switch]$Kaldir) { Add-AumidTipi; [StremioOfflineAumid]::Kisayol([IO.Path]::GetFullPath($yol), $(if ($Kaldir) { $null } else { $script:StremioAumid })) }
+# Kısayolun kimliğini Gezgin'in özellik sisteminden okur (bağımsız okuyucu; sınama ve onarım için)
+function Get-KisayolAumid($yol) {
+    $tam = [IO.Path]::GetFullPath($yol)
+    $o = (New-Object -ComObject Shell.Application).NameSpace([IO.Path]::GetDirectoryName($tam)).ParseName([IO.Path]::GetFileName($tam))
+    if (-not $o) { return $null }
+    return $o.ExtendedProperty('System.AppUserModel.ID')
+}
+# Açık Stremio penceresine kimlik + "sabitlenince bizim başlatıcı açılsın" komutu yazar.
+function Set-StremioPencereAumid($hwnd, $kok, $node, $exe) {
+    Add-AumidTipi
+    $komut = "`"$(Join-Path $env:SystemRoot 'System32\wscript.exe')`" $(Get-BizimArgumanlar $kok 'baslat-stremio.vbs' $node)"
+    [StremioOfflineAumid]::Pencere([IntPtr]$hwnd, $script:StremioAumid, $komut, (Get-KisayolSimgesi $exe), 'Stremio')
+}
+
+function Get-StremioKisayolAdaylari($masaustu, $menu, $gorev = $null) {
     $a = @()
+    # Görev çubuğuna sabitlenmiş Stremio kısayolları (User Pinned\TaskBar; adı "Stremio" ile başlayan)
+    if ($gorev -and (Test-Path -LiteralPath $gorev)) {
+        foreach ($f in Get-ChildItem -LiteralPath $gorev -Filter 'Stremio*.lnk' -File -ErrorAction SilentlyContinue) { $a += @{ yer = 'gorev'; yol = $f.FullName } }
+    }
     if ($masaustu) { $a += @{ yer = 'masaustu'; yol = [IO.Path]::Combine($masaustu, 'Stremio.lnk') } }
     if ($menu) {
         $a += @{ yer = 'menu'; yol = [IO.Path]::Combine($menu, 'Stremio.lnk') }
@@ -169,13 +265,14 @@ $script:StremioAciklama = "Stremio'yu Offline İndir düğmeleriyle aç"
 #  - Bizim kısayol: beklenenden farklıysa (node yolu, Stremio simgesi) güncellenir.
 #  - Başka bir şeye giden "Stremio.lnk": dokunulmaz.
 #  - -Olustur: masaüstünde / Başlat menüsünde Stremio kısayolu yoksa "Stremio.lnk" oluşturulur (yedekte bizimOlusturdu).
-function Invoke-StremioKisayolDuzeni($kok, $node, $exe, $masaustu, $menu, $veri, [switch]$Olustur) {
+#  - -GorevCubugu: sabitlenmiş Stremio kısayolları da çevrilir (görev çubuğu kimliği sayesinde tek düğme kalır); oluşturulmaz.
+function Invoke-StremioKisayolDuzeni($kok, $node, $exe, $masaustu, $menu, $veri, [switch]$Olustur, [string]$GorevCubugu = '') {
     $simge = if ($exe -and (Test-Path -LiteralPath $exe)) { "$exe,0" } else { $null }
     $yedek = Read-KisayolYedek $veri
     $degisiklikler = @()
     $atlananlar = @()
-    $bulunan = @{ masaustu = $false; menu = $false }
-    foreach ($aday in Get-StremioKisayolAdaylari $masaustu $menu) {
+    $bulunan = @{ masaustu = $false; menu = $false; gorev = $false }
+    foreach ($aday in Get-StremioKisayolAdaylari $masaustu $menu $GorevCubugu) {
         $yol = $aday.yol; $yer = $aday.yer
         if (-not (Test-Path -LiteralPath $yol)) { continue }
         $b = Get-KisayolBilgi $yol

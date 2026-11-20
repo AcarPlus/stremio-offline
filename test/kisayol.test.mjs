@@ -262,3 +262,47 @@ describe('kısayol bekçisi (lib/kisayol-bekci.mjs)', { skip: !win }, () => {
     ok(t.kaldir())
   })
 })
+
+// Görev çubuğu: bizim "Stremio" kısayolları Stremio penceresiyle aynı AppUserModelID'yi taşır; sabitlenmiş
+// Stremio kısayolu (User Pinned\TaskBar) başlatıcıya çevrilir, kaldırınca asıl haline ve kimliksiz döner.
+const NOTEPAD = path.join(process.env.SystemRoot || 'C:/Windows', 'notepad.exe')
+describe('görev çubuğu kimliği ve sabitlenmiş kısayol', { skip: !win }, () => {
+  const aumid = yol => psKomut(`$o = (New-Object -ComObject Shell.Application).NameSpace([IO.Path]::GetDirectoryName($env:T_YOL)).ParseName([IO.Path]::GetFileName($env:T_YOL)); [Console]::Out.Write("" + $o.ExtendedProperty('System.AppUserModel.ID'))`, { T_YOL: yol })
+  const s = win ? kume('gorev') : null
+  const gorev = win ? path.join(TMP, 'gorev', 'TaskBar') : ''
+  const exe = win ? sahteExe(path.join(TMP, 'gorev', 'Stremio')) : ''
+  const psG = (file, args) => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, file), ...args], { encoding: 'utf8', timeout: 90000, env: ENV })
+  const kurArg = () => ['-BaslangicKlasoru', s.st, '-MasaustuKlasoru', s.ds, '-BaslatMenusuKlasoru', s.pm, '-VeriKlasoru', s.veri, '-GorevCubuguKlasoru', gorev]
+
+  test('kur.ps1: sabitlenmiş Stremio kısayolu çevrilir, bütün "Stremio" kısayollarında aynı kimlik; başka sabitlemeye dokunulmaz', () => {
+    setKayit(path.dirname(exe), '5.0.28')
+    mkLnk(path.join(gorev, 'Stremio.lnk'), { TargetPath: exe, WorkingDirectory: path.dirname(exe) })
+    mkLnk(path.join(gorev, 'Not Defteri.lnk'), { TargetPath: NOTEPAD })
+    ok(psG('kur.ps1', kurArg()))
+    const pin = lnk(path.join(gorev, 'Stremio.lnk'))
+    assert.ok(bizimMi(pin), JSON.stringify(pin))
+    for (const f of [path.join(gorev, 'Stremio.lnk'), path.join(s.ds, 'Stremio.lnk'), path.join(s.pm, 'Stremio.lnk')]) assert.equal(aumid(f), 'StremioOffline.Stremio', f)
+    assert.equal(aumid(path.join(s.st, 'Stremio Offline Servis.lnk')), '', 'servis kısayolunda kimlik yok')
+    assert.equal(lnk(path.join(gorev, 'Not Defteri.lnk')).TargetPath.toLowerCase(), NOTEPAD.toLowerCase())
+    assert.equal(okuJson(s.kurulum).klasorler.gorevCubugu, gorev)
+  })
+
+  test('kisayol-onar.ps1: Stremio sabitlemeyi yeniden doğrudan programa yazarsa yine çevrilir', () => {
+    mkLnk(path.join(gorev, 'Stremio.lnk'), { TargetPath: exe })
+    ok(psG('kisayol-onar.ps1', ['-VeriKlasoru', s.veri]))
+    assert.ok(bizimMi(lnk(path.join(gorev, 'Stremio.lnk'))))
+    assert.equal(aumid(path.join(gorev, 'Stremio.lnk')), 'StremioOffline.Stremio')
+  })
+
+  test('kaldir.ps1: sabitlenmiş kısayol Stremio\'ya döner ve kimliği silinir', () => {
+    ok(psG('kaldir.ps1', ['-BaslangicKlasoru', s.st, '-MasaustuKlasoru', s.ds, '-BaslatMenusuKlasoru', s.pm, '-VeriKlasoru', s.veri]))
+    const pin = lnk(path.join(gorev, 'Stremio.lnk'))
+    assert.equal(pin.TargetPath.toLowerCase(), exe.toLowerCase())
+    assert.equal(aumid(path.join(gorev, 'Stremio.lnk')), '')
+  })
+
+  test('kur.ps1 -VeriKlasoru ile ve -GorevCubuguKlasoru verilmeden: gerçek görev çubuğuna dokunmaz', () => {
+    const t = fs.readFileSync(path.join(ROOT, 'kur.ps1'), 'utf8')
+    assert.match(t, /if \(\$VeriKlasoru\) \{ '' \}/)
+  })
+})

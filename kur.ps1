@@ -12,12 +12,16 @@ param(
     [string]$BaslangicKlasoru = [Environment]::GetFolderPath('Startup'),
     [string]$MasaustuKlasoru = [Environment]::GetFolderPath('Desktop'),
     [string]$BaslatMenusuKlasoru = [Environment]::GetFolderPath('Programs'),
-    [string]$VeriKlasoru = ''
+    [string]$VeriKlasoru = '',
+    # Görev çubuğuna sabitlenmiş kısayollar. Verilmezse: gerçek kurulumda kullanıcının klasörü, -VeriKlasoru ile
+    # (sınama) hiç dokunulmaz.
+    [string]$GorevCubuguKlasoru = $null
 )
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 . (Join-Path $root 'ortak.ps1')
 $veri = if ($VeriKlasoru) { [IO.Path]::GetFullPath($VeriKlasoru) } else { Get-VeriKlasoru $root }
+if (-not $PSBoundParameters.ContainsKey('GorevCubuguKlasoru')) { $GorevCubuguKlasoru = if ($VeriKlasoru) { '' } else { Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar' } }
 
 $node = Find-Node $root
 if (-not $node) { throw 'Node.js bulunamadı (node\node.exe yok ve node komutu PATH içinde değil).' }
@@ -32,7 +36,7 @@ Set-BizimKisayol $servisLnk $root 'baslat-servis.vbs' $node 'Offline İndir serv
 Write-Host "Oluşturuldu: $servisLnk"
 
 # 2) Tek "Stremio" kısayolu (masaüstü + Başlat menüsü)
-$sonuc = Invoke-StremioKisayolDuzeni $root $node $stremio $MasaustuKlasoru $BaslatMenusuKlasoru $veri -Olustur
+$sonuc = Invoke-StremioKisayolDuzeni $root $node $stremio $MasaustuKlasoru $BaslatMenusuKlasoru $veri -Olustur -GorevCubugu $GorevCubuguKlasoru
 $sonuc.degisiklikler + $sonuc.atlananlar | ForEach-Object { Write-Host $_ }
 Remove-EskiKisayollar $root @($MasaustuKlasoru, $BaslatMenusuKlasoru) | ForEach-Object { Write-Host $_ }
 
@@ -42,6 +46,6 @@ Write-JsonDosya (Join-Path $veri $script:KurulumDosyasi) ([ordered]@{
     kuruldu = (Get-Date).ToString('o')
     kok = $root
     node = $node
-    klasorler = [ordered]@{ baslangic = $BaslangicKlasoru; masaustu = $MasaustuKlasoru; baslatMenusu = $BaslatMenusuKlasoru }
+    klasorler = [ordered]@{ baslangic = $BaslangicKlasoru; masaustu = $MasaustuKlasoru; baslatMenusu = $BaslatMenusuKlasoru; gorevCubugu = $GorevCubuguKlasoru }
 })
 Write-Host 'Kuruldu. Bir sonraki oturum açılışında servis kendiliğinden başlar; Stremio için "Stremio" kısayoluna tıkla.'

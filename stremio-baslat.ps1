@@ -64,9 +64,32 @@ if (-not (Test-Path $stremio)) {
     exit 1
 }
 $procAdi = [IO.Path]::GetFileNameWithoutExtension($stremio)
+$nodeYolu = if ($NodeYolu -and (Test-Path $NodeYolu)) { $NodeYolu } else { Find-Node $root }
+
+# Görev çubuğu: Stremio penceresine bizim kimliği ve "sabitlenince bizim başlatıcıyı aç" komutunu yazar (pencere
+# çıkana dek en çok ~40 sn bekler). Böylece açık pencere sabitlenince düğmesiz stremio-shell-ng.exe değil bu başlatıcı
+# sabitlenir ve bizim "Stremio" kısayollarıyla tek görev çubuğu düğmesinde toplanır. Hata başlatmayı bozmaz.
+function Set-GorevCubugu {
+    if ($env:OFFLINE_AUMID -eq '0') { return }
+    try {
+        for ($i = 0; $i -lt 80; $i++) {
+            $hepsi = @(Get-Process $procAdi -ErrorAction SilentlyContinue)
+            if (-not $hepsi.Count -and $i -ge 20) { Yaz-Gunluk 'gorev cubugu: Stremio sureci yok (kapandi?)'; return }
+            $p = $hepsi | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+            if ($p) {
+                Set-StremioPencereAumid $p.MainWindowHandle $root $nodeYolu $stremio
+                Yaz-Gunluk "gorev cubugu kimligi yazildi (pencere $($p.MainWindowHandle))"
+                return
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        Yaz-Gunluk 'gorev cubugu: Stremio penceresi 40 sn icinde bulunamadi'
+    } catch { Yaz-Gunluk ('gorev cubugu kimligi yazilamadi: ' + $_.Exception.Message) }
+}
+
 $running = Get-Process $procAdi -ErrorAction SilentlyContinue
 if ($running) {
-    if (Test-Url "http://127.0.0.1:$debugPort/json/version") { exit 0 }   # zaten düğmeli açık
+    if (Test-Url "http://127.0.0.1:$debugPort/json/version") { Set-GorevCubugu; exit 0 }   # zaten düğmeli açık
     # Düğmesiz açık. Kapatmak izlenen bir şeyi keser; önce sor.
     $cevap = Show-Mesaj ("Stremio düğmeler olmadan açık.`n`nDüğmelerin gelmesi için Stremio'yu kapatıp yeniden açmam gerekiyor." +
         "`nŞu an bir şey izliyorsan Hayır de.`n`nKapatıp yeniden açayım mı?") 'YesNo' 'Button2'
@@ -78,3 +101,4 @@ if ($running) {
 
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$debugPort"
 Start-Process $stremio
+Set-GorevCubugu

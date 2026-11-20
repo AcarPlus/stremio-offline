@@ -29,7 +29,8 @@ if (-not $node -or -not (Test-Path -LiteralPath $node)) { $bulunan = Find-Node $
 $exe = Get-StremioExe
 $k = $kurulum.klasorler
 
-$sonuc = Invoke-StremioKisayolDuzeni $root $node $exe "$($k.masaustu)" "$($k.baslatMenusu)" $veri
+# Görev çubuğu klasörü yalnız kurulum işaretinde yazılıysa (kur.ps1 1.2.0+); eski işaretle sabitlenmişlere dokunulmaz.
+$sonuc = Invoke-StremioKisayolDuzeni $root $node $exe "$($k.masaustu)" "$($k.baslatMenusu)" $veri -GorevCubugu "$($k.gorevCubugu)" 
 foreach ($d in $sonuc.degisiklikler) { Yaz $d }
 
 # Başlangıç kısayolu: varsa ve bizimse simgesi/node yolu güncel tutulur; yoksa yalnız bir kez bildirilir.

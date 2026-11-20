@@ -65,6 +65,7 @@ function Restore-StremioKisayolu($yol, $asil) {
     $kl.WindowStyle = if ($asil -and $asil.WindowStyle) { [int]$asil.WindowStyle } else { 1 }
     if ($asil -and $asil.Hotkey) { $kl.Hotkey = "$($asil.Hotkey)" }
     $kl.Save()
+    try { if (Get-KisayolAumid $yol) { Set-KisayolAumid $yol -Kaldir } } catch {}   # bizim görev çubuğu kimliği kalmasın
     Write-Host "Stremio'nun asıl haline döndürüldü: $yol"
 }
 
