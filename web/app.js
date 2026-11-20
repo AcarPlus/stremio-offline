@@ -310,11 +310,15 @@ function viewHome (root, current, baslik = 'İndirmeler') {
     try { setKapat(await api('/api/kapat-zamanla')) } catch {}
   }
   kapatTik.addEventListener('change', async () => {
-    if (kapatTik.checked) {
-      const r = await onayla({ baslik: 'İndirmeler bitince bilgisayar kapansın mı?', metin: 'Etkin bütün indirmeler tamamlanınca Windows 60 saniyelik geri sayımla bilgisayarı kapatır; bu süre içinde İptal edebilirsin. Kaydedilmemiş işlerin varsa kaydet. Bu ayar kalıcı değildir (servis yeniden başlayınca kapanır).', tamam: 'Aç' })
+    // İstenen değer tıklama anında alınır: onay penceresi açıkken 1 sn'lik yoklama kutuyu geri çevirmesin (kilit)
+    const enabled = kapatTik.checked
+    if (enabled) {
+      kapatKilit = true
+      let r
+      try { r = await onayla({ baslik: 'İndirmeler bitince bilgisayar kapansın mı?', metin: 'Etkin bütün indirmeler tamamlanınca Windows 60 saniyelik geri sayımla bilgisayarı kapatır; bu süre içinde İptal edebilirsin. Kaydedilmemiş işlerin varsa kaydet. Bu ayar kalıcı değildir (servis yeniden başlayınca kapanır).', tamam: 'Aç' }) } finally { kapatKilit = false }
       if (!r.ok) { kapatTik.checked = false; return }
     }
-    await kapatGonder(kapatTik.checked)
+    await kapatGonder(enabled)
   })
   kapatIptal.addEventListener('click', () => kapatGonder(false))
 
