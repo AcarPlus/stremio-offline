@@ -1,6 +1,7 @@
 @echo off
 rem Stremio Offline: tek adimda kurulum. Bu dosyaya cift tikla.
-rem Masaustune ve Baslat menusune "Stremio Offline" kisayolu ekler, oturum acilisinda servisi baslatir,
+rem Stremio'nun masaustu / Baslat menusu kisayolunu ("Stremio") Indir dugmeleriyle acacak sekilde ayarlar
+rem (yoksa olusturur), oturum acilisinda servisi baslatir,
 rem sonra Stremio'yu Indir dugmeleriyle acar. Yonetici yetkisi istemez.
 cd /d "%~dp0"
 echo Stremio Offline kuruluyor...
@@ -16,6 +17,6 @@ if errorlevel 1 (
 echo.
 echo Stremio aciliyor...
 wscript //B //Nologo "%~dp0baslat-stremio.vbs"
-echo Tamam. Bundan sonra Stremio'yu masaustundeki "Stremio Offline" kisayolundan ac.
+echo Tamam. Stremio'yu her zamanki gibi masaustundeki ya da Baslat menusundeki "Stremio" kisayolundan ac.
 echo Bu pencere birkac saniye sonra kapanir.
 timeout /t 8 >nul

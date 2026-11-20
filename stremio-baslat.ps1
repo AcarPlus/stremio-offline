@@ -1,8 +1,9 @@
-﻿# Stremio'yu "İndir" düğmeleriyle açar (masaüstü/Başlat menüsündeki "Stremio Offline" kısayolu bunu çağırır):
+﻿# Stremio'yu "İndir" düğmeleriyle açar (masaüstü/Başlat menüsündeki "Stremio" kısayolu bunu çağırır):
 #  1) Offline İndir servisi çalışmıyorsa gizli pencerede başlatır,
 #  2) Stremio'yu, servisin arayüze düğme ekleyebilmesi için gereken hata ayıklama kapısıyla açar
 #     (kapı yalnızca bu başlatılan Stremio sürecine verilir; ortam değişkeni kalıcı yapılmaz).
-# Stremio'yu eski kısayolundan açarsan düğmeler görünmez; bu betikle aç.
+# Stremio programı doğrudan açılırsa düğmeler görünmez; bu betikle aç.
+# Stremio'nun yeri kaldırma kaydından (InstallLocation) bulunur (ortak.ps1 Get-StremioExe).
 param([string]$NodeYolu = '')
 
 $root = $PSScriptRoot
@@ -18,6 +19,7 @@ function Yaz-Gunluk($metin) {
 }
 # Beklenmeyen hata sessizce kaybolmasın
 trap { Yaz-Gunluk ('HATA: ' + $_.Exception.Message + ' (' + $_.InvocationInfo.PositionMessage.Trim() + ')'); exit 1 }
+. (Join-Path $root 'ortak.ps1')
 
 $port = 11480
 $debugPort = 11481
@@ -54,8 +56,8 @@ if (-not (Test-Url "http://127.0.0.1:$port/manifest.json")) {
     }
 }
 
-# 2) Stremio (sınamada OFFLINE_STREMIO_EXE ile sahte bir program verilebilir)
-$stremio = if ($env:OFFLINE_STREMIO_EXE) { $env:OFFLINE_STREMIO_EXE } else { Join-Path $env:LOCALAPPDATA 'Programs\Stremio\stremio-shell-ng.exe' }
+# 2) Stremio (sınamada OFFLINE_STREMIO_EXE ile sahte bir program, OFFLINE_STREMIO_KAYIT ile sahte kaldırma kaydı verilebilir)
+$stremio = Get-StremioExe
 if (-not (Test-Path $stremio)) {
     Yaz-Gunluk "Stremio bulunamadi: $stremio"
     [void](Show-Mesaj "Stremio bulunamadı: $stremio" 'OK')

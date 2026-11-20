@@ -22,6 +22,7 @@ import { Addon } from './lib/addon.mjs'
 import { Api } from './lib/api.mjs'
 import { servePlay } from './lib/play.mjs'
 import { startInjector } from './lib/inject.mjs'
+import { startKisayolBekci } from './lib/kisayol-bekci.mjs'
 
 // Yakalanmamış hata servisi kapatmaz: günlüğe yazılır, servis sürer.
 // Ayrıca stderr'e de yazılır: başlatıcı (baslat-servis.vbs) stderr'i data\baslatici.log'a ekler, açılışta çökme görünür kalır (E4).
@@ -186,6 +187,7 @@ server.on('error', async e => {
 })
 
 let stopInjector = null
+let stopKisayolBekci = null
 server.listen(cfg.port, '127.0.0.1', () => {
   log(`Offline İndir çalışıyor → ${cfg.base}`)
   log(`İndirme klasörü: ${cfg.downloadDir}`)
@@ -196,6 +198,8 @@ server.listen(cfg.port, '127.0.0.1', () => {
   pool.start().catch(e => log('motor başlatılamadı:', e.message))
   manager.startup()
   if (cfg.inject) stopInjector = startInjector(cfg)
+  // Stremio güncellenince "Stremio" kısayolunu yine düğmeli başlatıcıya çevirir (sınama kipinde kapalı).
+  try { stopKisayolBekci = startKisayolBekci(cfg) } catch (e) { log('kısayol bekçisi başlatılamadı:', e.message) }
 })
 
 let stopping = false
@@ -204,6 +208,7 @@ function shutdown (code = 0) {
   stopping = true
   log('servis kapanıyor')
   try { stopInjector?.() } catch {}
+  try { stopKisayolBekci?.() } catch {}
   try { manager.stop() } catch {}
   try { pool.stopAll() } catch {}
   try { server.close() } catch {}

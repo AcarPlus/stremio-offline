@@ -26,7 +26,7 @@ if (Test-Path $hedef) { Remove-Item $hedef -Recurse -Force }
 if (Test-Path $zip) { Remove-Item $zip -Force }
 New-Item -ItemType Directory -Force $hedef | Out-Null
 
-$dosyalar = 'server.mjs', 'inject.js', 'package.json', 'kur.ps1', 'kaldir.ps1', 'stremio-baslat.ps1',
+$dosyalar = 'server.mjs', 'inject.js', 'package.json', 'kur.ps1', 'kaldir.ps1', 'stremio-baslat.ps1', 'ortak.ps1', 'kisayol-onar.ps1',
     'baslat-servis.vbs', 'baslat-stremio.vbs', 'baslat.cmd'
 foreach ($f in $dosyalar) { Copy-Item (Join-Path $root $f) $hedef }
 foreach ($d in 'lib', 'web') {

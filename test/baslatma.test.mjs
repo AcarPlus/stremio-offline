@@ -25,34 +25,7 @@ describe('ikinci servis örneği', () => {
   })
 })
 
-describe('kur.ps1 / kaldir.ps1', { skip: process.platform !== 'win32' }, () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kur-'))
-  const dirs = { st: path.join(tmp, 'baslangic'), ds: path.join(tmp, 'masaustu'), pm: path.join(tmp, 'menu') }
-  before(() => { for (const d of Object.values(dirs)) fs.mkdirSync(d, { recursive: true }) })
-  after(() => fs.rmSync(tmp, { recursive: true, force: true }))
-  const ps = (file, args = []) => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, file),
-    '-BaslangicKlasoru', dirs.st, '-MasaustuKlasoru', dirs.ds, '-BaslatMenusuKlasoru', dirs.pm, ...args], { encoding: 'utf8', timeout: 60000 })
-  const lnkInfo = f => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    `$k=(New-Object -ComObject WScript.Shell).CreateShortcut('${f}'); $k.TargetPath; $k.Arguments; $k.WorkingDirectory`], { encoding: 'utf8' }).stdout.split(/\r?\n/)
-
-  test('kur.ps1 üç kısayol oluşturur (betik yolları kendi konumundan türer), kaldir.ps1 siler', () => {
-    const r = ps('kur.ps1')
-    assert.equal(r.status, 0, r.stderr || r.stdout)
-    const files = { st: 'Stremio Offline Servis.lnk', ds: 'Stremio Offline.lnk', pm: 'Stremio Offline.lnk' }
-    for (const [k, f] of Object.entries(files)) {
-      const p = path.join(dirs[k], f)
-      assert.ok(fs.existsSync(p), p)
-      const [target, args, wd] = lnkInfo(p)
-      assert.match(target, /wscript\.exe$/i)
-      assert.ok(args.includes(path.join(ROOT, k === 'st' ? 'baslat-servis.vbs' : 'baslat-stremio.vbs')), args)
-      assert.equal(path.resolve(wd), path.resolve(ROOT))
-    }
-    assert.equal(ps('kur.ps1').status, 0, 'yinelenen kurulum güvenli')
-    const k2 = ps('kaldir.ps1')
-    assert.equal(k2.status, 0, k2.stderr || k2.stdout)
-    for (const [k, f] of Object.entries(files)) assert.ok(!fs.existsSync(path.join(dirs[k], f)), 'silindi: ' + f)
-  })
-})
+// kur.ps1 / kaldir.ps1 / kisayol-onar.ps1 sınamaları: test/kisayol.test.mjs
 
 describe('E9: kapı başka bir uygulamada', () => {
   const sc = serviceConfig(98)
@@ -178,13 +151,11 @@ describe('E2/E4: stremio-baslat.ps1', { skip: process.platform !== 'win32' }, ()
   })
 })
 
-describe('E5: kaldir.ps1 eşleşme işlevi (Test-Bizim) saf olarak sınanır; kısayol oluşturulmaz/silinmez', { skip: process.platform !== 'win32' }, () => {
-  // İşlev kaldir.ps1'den çıkarılıp yalnızca dizgelerle çalıştırılır (kaldir.ps1'in kendisi çalıştırılmaz).
-  const src = fs.readFileSync(path.join(ROOT, 'kaldir.ps1'), 'utf8')
-  const fn = src.slice(src.indexOf('function Test-Bizim'), src.indexOf('function Remove-Kisayol'))
+describe('E5: kısayol eşleşme işlevi (ortak.ps1 Test-Bizim) saf olarak sınanır; kısayol oluşturulmaz/silinmez', { skip: process.platform !== 'win32' }, () => {
+  // ortak.ps1 yalnızca işlev tanımlar; işlev dizgelerle çalıştırılır (kaldir.ps1'in kendisi çalıştırılmaz).
   const dene = (root, arg) => {
-    const ps = `$root = $env:T_KOK\n${fn}\nif (Test-Bizim $env:T_ARG) { 'EVET' } else { 'HAYIR' }`
-    return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', timeout: 30000, env: { ...process.env, T_KOK: root, T_ARG: arg } }).stdout.trim()
+    const ps = `. $env:T_ORTAK\n$root = $env:T_KOK\nif (Test-Bizim $env:T_ARG) { 'EVET' } else { 'HAYIR' }`
+    return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', ps], { encoding: 'utf8', timeout: 30000, env: { ...process.env, T_ORTAK: path.join(ROOT, 'ortak.ps1'), T_KOK: root, T_ARG: arg } }).stdout.trim()
   }
   const kok = path.win32.join('C:', 'Araclar', 'stremio-offline')
 
