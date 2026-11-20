@@ -1,17 +1,30 @@
 {
   "name": "stremio-offline",
   "version": "1.2.0",
-  "description": "Stremio için yerel indirme servisi ve eklenti (motor: rqbit)",
+  "description": "Download Stremio movies and series to your PC and watch them offline (Stremio 5, Windows)",
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test --test-concurrency=1 test/"
   },
-  "keywords": [],
+  "keywords": [
+    "stremio",
+    "stremio-addon",
+    "offline",
+    "download",
+    "torrent",
+    "rqbit",
+    "windows"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AcarPlus/stremio-offline.git"
+  },
+  "homepage": "https://github.com/AcarPlus/stremio-offline#readme"
 }

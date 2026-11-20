@@ -26,8 +26,9 @@ Stremio'yu her zamanki gibi masaüstündeki ya da Başlat menüsündeki "Stremio
 kurulum bu kısayolu düğmelerle açacak şekilde ayarlar (masaüstünde yoksa ekler). Ayrı bir kısayol yoktur.
 Stremio kendini güncelleyince kısayolunu eski haline getirir; arka plandaki servis bunu birkaç saniye
 ile 10 dakika içinde kendiliğinden düzeltir.
-Görev çubuğuna sabitlenmiş Stremio simgesi değiştirilmez: oradan açarsan düğmeler görünmez
-(indirdiklerin yine yerinde durur).
+Görev çubuğuna sabitlenmiş Stremio simgesi de aynı şekilde ayarlanır; oradan açınca da düğmeler gelir.
+Stremio'yu başka bir yoldan açarsan (ör. kapalıyken bir stremio:// bağlantısından) düğmeler görünmeyebilir;
+indirdiklerin yine yerinde durur, Stremio'yu simgesinden yeniden açman yeter.
 
 İndirilen dosyalar: Videolar\Stremio-Offline klasörü.
 
@@ -47,7 +48,9 @@ SORUN OLURSA
   Stremio güncellendikten hemen sonra da böyle olabilir; birkaç dakika sonra yeniden dene
   ya da KUR.cmd'yi yeniden çalıştır.
 - İndirme Merkezi'ni tarayıcıda da açabilirsin: http://127.0.0.1:11480
-- Günlük dosyası (kurulumu gönderene bunu yolla): bu klasörde data\servis.log
+- Günlük dosyası: bu klasörde data\servis.log (sorun bildirirken ekle).
   İndirme motorunun günlükleri: data\rqbit\ altında rqbit.log dosyaları.
 - Antivirüs ya da "Akıllı Uygulama Denetimi" bin\rqbit.exe dosyasını engellerse indirme başlamaz;
-  bu durumda kurulumu gönderen kişiye haber ver.
+  bu durumda bin\rqbit.exe için izin ver ya da sorunu bildir.
+
+Sorun bildirmek ve yeni sürümler: https://github.com/AcarPlus/stremio-offline
