@@ -153,7 +153,7 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
 
 ### Başlık arama (Faz 2)
 - `GET /api/search?q=breaking%20bad` → `{ q, results: [{ type: "movie"|"series", id: "tt…", name, year, poster }] }`. Cinemeta'nın herkese açık arama kataloğunu (`v3-cinemeta.strem.io/catalog/<tür>/top/search=…`) film ve dizi için sorar; adında arama sözcüğü geçenler öne alınır, türü başına en çok 15 sonuç, 5 dk önbellek. `q` en az 2 karakter (`400`). İnternet yoksa `502`. `poster` uzak adrestir (çevrimdışıyken görünmez).
-- `GET /api/title?type=series&id=tt0903747` → `{ type, id, name, year, poster, description, seasons: [{ season, episodes }] }`. Sezon seçiciye giden sezon listesi (0 = özel bölümler). Cinemeta'ya gider (`502` alınamazsa).
+- `GET /api/title?type=series&id=tt0903747` → `{ type, id, name, year, poster, description, runtime, seasons: [{ season, episodes }] }`. Sezon seçiciye giden sezon listesi (0 = özel bölümler). `runtime`: Cinemeta'nın süre metni ("2h 10min", "130 min"; dizide bölüm süresi; yoksa `""`), sürüm seçicinin kalite rozeti için. Cinemeta'ya gider (`502` alınamazsa).
 
 ### Oynatma
 - `GET /play/:type/:id/:infoHash/:fileIdx` (`fileIdx` bilinmiyorsa `x`). Stremio'nun kayıtlı adresleriyle aynı biçim.
@@ -178,6 +178,23 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
 - Otomatik: servis açılışından ~1 dk sonra ve 24 saatte bir, `autoUpdateCheck` açıksa (vars. açık, kalıcı; `POST /api/settings { "autoUpdateCheck": false }`). İstekte `User-Agent: stremio-offline`, başka kimlik bilgisi yok. Arayüz yeni sürümde İndirme Merkezi'nde şerit gösterir (sürüm sayfası yeni sekmede).
 - Sınama: adres `OFFLINE_GUNCELLEME_URL` ile yerel sahte sunucuya yönlenir (`OFFLINE_GUNCELLEME_ILK_MS`, `OFFLINE_GUNCELLEME_ARALIK_MS` zamanlamayı kısaltır). Sınama kipinde (`OFFLINE_DATA_DIR`) bu adres yoksa ağa hiç çıkılmaz ve otomatik denetim kurulmaz.
 
+### Klip (indirmeden önce 60 sn'lik örnek)
+Bir kaynağın görüntü kalitesini indirmeden görmek için. Ayrıntı: `lib/klip.mjs`.
+- Torrent **geçici** olarak motor havuzunda kendi rqbit sürecinde başlatılır (havuz anahtarı `klip:<infoHash>`; `GET /api/engines` bunu gösterir). Kütüphaneye/İndirilenler'e **eklenmez**, kalıcı kayıt yok. Yalnız seçilen dosya (`only_files`) `data/klipler/gecici/<iş>` klasörüne iner (indirme klasörüne değil). İndirme sınırı yok, yükleme sınırı ayarı uygulanır. Dosya kütüphanede zaten tamamsa motor açılmaz, diskteki dosyadan kesilir (`source: "disk"`).
+- ffprobe rqbit akış adresinden (`/torrents/<ih>/stream/<idx>`, Range) süreyi ve akışları okur; ffmpeg sürenin **%30**'una girdi öncesi `-ss` ile atlar, `-t 60`, **`-c copy`** (yeniden sıkıştırma yok, kalite birebir): ilk video (kapak resmi değil) + ilk ses + altyazılar (metin ve PGS/VobSub kopyalanır, MP4 `mov_text` srt'ye çevrilir, diğerleri atlanır; altyazıyla kesilemezse altyazısız yeniden denenir) + ASS yazı tipleri → `.mkv`. Kopya kesim anahtar kareden başladığı için klip birkaç saniye uzun olabilir. MKV (Cues sonda) ve MP4 (moov sonda) yerel döngüde doğrulandı: rqbit, ffmpeg'in istediği bölgeleri öne alır.
+- Bitince (başarılı/başarısız/iptal) geçici motor kapanır, geçici parçalar silinir. Klip `data/klipler/<id>.mkv` (+ `<id>.json`) olarak **24 saat** tutulur; servis açılışında ve saatte bir temizlenir; aynı içerik (aynı torrent ya da aynı film/bölüm kimliği) kütüphanede tamamlanınca silinir (dakikada bir ve `GET /api/klip`'te denetlenir).
+- Aynı anda **tek iş**. Zaman aşımı 3 dk. Eş yoksa/torrent bilgisi gelmezse: "Bu kaynağın eşi yok ya da yanıt vermiyor; klip alınamadı."
+- ffmpeg/ffprobe: Stremio 5'in kurulum klasöründekiler (kaldırma kaydı HKCU Uninstall, DisplayName "Stremio…" → InstallLocation; yoksa `%LOCALAPPDATA%ProgramsStremio`). `OFFLINE_FFMPEG` (ffmpeg.exe yolu ya da klasörü) verilirse yalnız o kullanılır. Stremio'nun dosyalarına yalnız okuma/çalıştırma.
+
+Uçlar (`:id` 16 onaltılık karakter):
+- `GET /api/klip` → `{ available, reason, ffmpegFrom, job, klips: [klip, …] }`. `available: false` ise `reason` açıklar (arayüzde düğme devre dışı). `job`: çalışan iş ya da `null`; `klips`: hazır klipler (en yeni önce).
+- `POST /api/klip` gövde `{ infoHash, fileIdx, trackers?, type?, id? (Stremio kimliği), title?, fileName?, replace? }` → `201 { existed: false, job }`. Aynı kaynağın (infoHash + fileIdx) hazır klibi ya da süren işi varsa `200 { existed: true, job }`. Başka bir iş sürüyorsa `409 { err, job }`; `replace: true` eskisini iptal edip yenisini başlatır. ffmpeg yoksa `503`. `fileIdx: null` → en büyük video (bölümse o bölüm).
+- `GET /api/klip/:id` → iş: `{ id, state, message, error, infoHash, fileIdx, type, videoId, title, fileName, source, downloadedBytes, peers, durationSec, startSec, lengthSec, doneSec, sizeBytes, startedAt, createdAt, expiresAt, fileUrl }`. `state`: `connecting` (bağlanıyor) → `downloading` (akış açıldı, `downloadedBytes`) → `preparing` (ffmpeg yazıyor, `doneSec/lengthSec`) → `ready` | `error` | `canceled`. Son 20 iş bellekte tutulur.
+- `DELETE /api/klip/:id` → `{ ok: true }`: süren işi iptal eder, hazır klibi siler.
+- `GET|HEAD /api/klip/:id/dosya` → klip (`video/x-matroska`, Range, `206`/`416`). Hazır değilse `409`.
+
+Arayüz: sürüm seçicide inmemiş her satırda "🎬 Klip" (`web/klip.js`); ilerleme satırın altında, hazır olunca "▶ Klibi oynat". Gömülü kipte `oynat` iletisi `playUrl: <servis>/api/klip/<id>/dosya` ile gider (`inject.js` yalnız bu biçimi ve `/play/` adreslerini kabul eder) ve Stremio oynatıcısında **kütüphane kimliği olmadan** (`#/player/<akış>`) açılır: izleme geçmişine film olarak yazılmaz. Tarayıcıda (gömülü değil) `<video>` ile oynatılır, yanında dosya bağlantısı.
+
 ### Eski uçlar (inject.js ve eski panel için korunur)
 - `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
 - `POST /api/download` gövde `{ type, id, infoHash, fileIdx, trackers, title, fileName }` → `{ ok, state, message, item }`. Zaten varsa: tamamlandıysa "Zaten indirilmiş", duraklatılmış/hatalıysa sürdürür, iniyorsa "Zaten iniyor (%x)".
@@ -200,6 +217,18 @@ Servis kökü (`/`) tek sayfalık arayüzü sunar; dosyalar `web/` altında (`in
 | `/#/dizi/<tt…>` | Dizinin sezon listesi |
 | `/#/surum/movie/<tt…>`, `/#/surum/series/<tt…:sezon:bölüm>` | Sürüm seçici (film ya da tek bölüm) |
 | `/#/sezon/<tt…>/<sezon>` | Sezon seçici (paket ya da bölüm bölüm) |
+
+### Sürüm seçicide kalite rozeti
+Her sürüm satırında indirmeden **tahmini ortalama bit hızı** (Mbps) gösterilir: Torrentio'nun bildirdiği boyut ÷ Cinemeta süresi (`/api/title` → `runtime`). Saf hesap `web/yardimci.js` (`parseRuntime`, `qualityBadge`, `techTags`; sınama `test/rozet.test.mjs`). Süre yoksa, sürüm sezon paketinden geliyorsa (`kind: pack`, boyut tüm paketin olabilir) ya da sonuç 120 Mbps'i aşıyorsa (koleksiyon boyutu) rozet yok. Renk, kalite grubuna göre (ses dahil ortalama; H.264 eşikleri, **HEVC/AV1'de ×0,6**):
+
+| Kalite | düşük (kırmızı) | orta (sarı) | iyi (yeşil) |
+|---|---|---|---|
+| 2160p | < 12 | 12–25 | > 25 |
+| 1080p | < 4 | 4–8 | > 8 |
+| 720p | < 2 | 2–4 | > 4 |
+| 480p | < 1 | 1–2 | > 2 |
+
+Kalite bilinmiyorsa değer renksiz gösterilir. Yanında addan okunan etiketler: video codec (AV1, HEVC, AVC), HDR (DV, HDR10+, HDR), 10bit, ses (Atmos, TrueHD, DTS:X, DTS-HD, DTS, DDP, DD, AAC, FLAC, Opus) ve Torrentio etiketleri (REMUX, CAM). Bit hızı yalnız tahmindir: aynı bit hızında kaynak (BluRay/WEB) ve kodlayıcı kalitesi farkı görünmez; bunun için "Klip".
 
 ### Gömülü kip ve ana pencere ile haberleşme
 Sayfa `?embed=1` ile açılırsa (ör. `http://127.0.0.1:11480/?embed=1#/surum/movie/tt1727587`) iframe içinde kullanılmak üzere sıkı üst çubuk gösterir, görünür bir "Kapat" düğmesi ve Esc ile kapatma sunar; "oynat" bir adrese gitmek yerine ana pencereye ileti yollar. Gönderim `window.parent.postMessage(ileti, hedefKöken)` iledir; hedef köken, tarayıcı bildirirse doğrudan üst pencerenin kökenidir (`location.ancestorOrigins[0]`), yoksa `*`. Tüm iletilerde `source: 'offline-indir'` vardır; ana pencere bunu ve `event.origin`'i (servis kökeni) denetlemelidir.
@@ -264,5 +293,7 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 | `OFFLINE_DEBUG_PORT` | Stremio hata ayıklama kapısı (`debugPort`). Sınama kipinde (`OFFLINE_DATA_DIR`) düğme ekleme yalnız bu verilirse açılır |
 | `OFFLINE_STDIN_CONTROL=1` | stdin'den `kapat` satırı gelince temiz kapanır |
 | `OFFLINE_POLL_MS` | Motor durum sorgu aralığı (vars. 1000) |
+| `OFFLINE_FFMPEG` | Klip için ffmpeg.exe yolu ya da klasörü (ffprobe.exe yanında); verilirse yalnız o kullanılır |
+| `OFFLINE_KLIP_TIMEOUT_MS`, `OFFLINE_KLIP_TTL_MS` | Klip işi zaman aşımı (vars. 180000) ve klibin saklanma süresi (vars. 24 saat) |
 
 Sınamalar: `npm test` (yerel döngü, internetsiz; geçici klasörde çalışır, kullanıcı verisine dokunmaz).
