@@ -52,6 +52,22 @@ describe('Kapatma (birim)', () => {
     k.stop()
   })
 
+  test('geri sayımda yeni indirme başlarsa kapatma kendiliğinden iptal edilir (/a)', async () => {
+    const items = [{ state: 'downloading' }]
+    const { k, calls } = mk(items)
+    k.arm()
+    items[0].state = 'completed'; items[0].completedAt = Date.now() + 5
+    await k.tick(); await k.tick()
+    assert.equal(k.durum().countdown, true)
+    items.push({ state: 'resolving' })
+    await k.tick()
+    assert.deepEqual(calls.at(-1)[1], ['/a'])
+    const d = k.durum()
+    assert.equal(d.countdown, false); assert.equal(d.armed, false)
+    assert.match(d.message, /yeni bir indirme/)
+    k.stop()
+  })
+
   test('hiçbiri tamamlanmadan etkin kalmazsa (duraklat/iptal) KAPATMAZ ve anahtar kapanır', async () => {
     const items = [{ state: 'downloading' }]
     const { k, calls } = mk(items)
