@@ -1,6 +1,6 @@
 {
   "name": "stremio-offline",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Stremio için yerel indirme servisi ve eklenti (motor: rqbit)",
   "main": "server.mjs",
   "scripts": {
