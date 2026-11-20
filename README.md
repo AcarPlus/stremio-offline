@@ -57,7 +57,7 @@ Stremio Offline is a free, open-source companion for **Stremio 5 on Windows**. I
 
 1. Download **`StremioOffline.zip`** from the [latest release](https://github.com/AcarPlus/stremio-offline/releases/latest).
 2. Extract it to a permanent folder, such as *Documents*.
-3. Double-click **`KUR.cmd`** (*KUR* means *install*).
+3. Double-click **`KUR.cmd`** (*KUR* means *install*), the only file next to the `uygulama` (*app*) folder.
    - If Windows SmartScreen says *"Windows protected your PC"*, click **More info → Run anyway**. The package isn't code-signed yet.
 4. Stremio opens with **Download** buttons and a **Downloads** section.
 
@@ -65,7 +65,7 @@ The package is self-contained. It includes a portable Node.js and rqbit, so ther
 
 ## Uninstall
 
-Double-click **`KALDIR.cmd`** (*KALDIR* means *uninstall*). The service stops and your Stremio shortcuts are restored. You can then delete the folder. Your downloaded videos stay in `Videos\Stremio-Offline` until you delete them yourself.
+Double-click **`uygulama\KALDIR.cmd`** (*KALDIR* means *uninstall*). The service stops and your Stremio shortcuts are restored. You can then delete the folder. Your downloaded videos stay in `Videos\Stremio-Offline` until you delete them yourself.
 
 ## Known limitations
 
@@ -104,7 +104,7 @@ Stremio Offline, **Windows'ta Stremio 5** için ücretsiz ve açık kaynak bir e
 
 1. [Son sürüm](https://github.com/AcarPlus/stremio-offline/releases/latest) sayfasından **`StremioOffline.zip`** dosyasını indir.
 2. Zip'i kalıcı bir klasöre aç (örneğin Belgeler). Klasörü sonra taşırsan `KUR.cmd`'yi yeniden çalıştır.
-3. **`KUR.cmd`** dosyasına çift tıkla. *"Windows bilgisayarınızı korudu"* uyarısı çıkarsa **Ek bilgi → Yine de çalıştır** de.
+3. Klasörde `uygulama` klasörünün yanındaki tek dosya olan **`KUR.cmd`**'ye çift tıkla. *"Windows bilgisayarınızı korudu"* uyarısı çıkarsa **Ek bilgi → Yine de çalıştır** de.
 4. Stremio açılır. Film sayfasında **İndir** düğmesi, sol menüde **İndirilenler** görünür.
 
 Stremio'yu her zamanki gibi kendi simgesinden aç: masaüstü, Başlat menüsü ya da görev çubuğu. Düğmeler oradan açınca da gelir. Stremio kendini güncelleyince arka plandaki servis birkaç saniye içinde ayarı geri getirir.
@@ -113,7 +113,7 @@ Stremio'yu her zamanki gibi kendi simgesinden aç: masaüstü, Başlat menüsü 
 
 ### Kaldırma
 
-**`KALDIR.cmd`** dosyasına çift tıkla. Servis kapanır, Stremio kısayolları eski haline döner. İndirdiğin videolar silinmez.
+**`uygulama\KALDIR.cmd`** dosyasına çift tıkla. Servis kapanır, Stremio kısayolları eski haline döner. İndirdiğin videolar silinmez.
 
 ### Neler yapabilir?
 
