@@ -639,7 +639,7 @@ async function viewSurum (root, type, id, current) {
         }
         const b1 = h('button', { class: 'dugme gri kucuk', onclick: () => ekle(false, b1, b2) }, 'İndir')
         const b2 = h('button', { class: 'dugme kucuk', onclick: () => ekle(true, b1, b2) }, '▶ İndir + oynat')
-        eylem.replaceChildren(b1, b2)
+        eylem.replaceChildren(b1, b2, ' ', ...klipDugmesi(v, { type, id, current })) // web/klip.js
       }
       async function ekle (oyna, b1, b2) {
         const tab = oyna && !EMBED ? window.open('', '_blank') : null

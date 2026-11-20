@@ -174,7 +174,9 @@
     /** İndirme Merkezi'nden gelen ileti güvenilir mi (köken servis, kaynak işareti doğru, tür bilinen). */
     function isHostMessage (data, origin, apiOrigin) {
       return !!data && typeof data === 'object' && origin === apiOrigin && data.source === 'offline-indir' &&
-        (data.type === 'kapat' || (data.type === 'oynat' && !!data.item && typeof data.item.playUrl === 'string' && data.item.playUrl.startsWith(apiOrigin + '/play/')))
+        (data.type === 'kapat' || (data.type === 'oynat' && !!data.item && typeof data.item.playUrl === 'string' &&
+          (data.item.playUrl.startsWith(apiOrigin + '/play/') || // klip: yalnız /api/klip/<16 hex>/dosya
+            (data.item.playUrl.startsWith(apiOrigin + '/api/klip/') && /^\/api\/klip\/[a-f0-9]{16}\/dosya$/.test(data.item.playUrl.slice(apiOrigin.length))))))
     }
 
     return { classHas, parseRoute, seasonFromText, embedUrl, offlineIndex, badgeInfo, streamFor, encodeStream, decodeStream, playerHash, isHostMessage, downloadButton }

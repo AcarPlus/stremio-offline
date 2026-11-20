@@ -157,6 +157,23 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - Değilse motorun akışından sunulur: `Range` desteklenir, inmemiş bir yere atlamak o bölgeyi öne alır. Öğe kütüphanede yoksa yalnızca son 6 saatte bir Torrentio listesinde görülmüş hash için oluşturulur (başka hash için `404`, indirme başlamaz); duraklatılmışsa sürdürülür, dosya seçili değilse seçime eklenir (Stremio'daki "İndir+Oynat" davranışı).
   - `HEAD` desteklenir; aralık dışı `416`. Yanıtta `Accept-Ranges: bytes`, `Content-Type` uzantıya göre.
 
+### Klip (indirmeden önce 60 sn'lik örnek)
+Bir kaynağın görüntü kalitesini indirmeden görmek için. Ayrıntı: `lib/klip.mjs`.
+- Torrent **geçici** olarak motor havuzunda kendi rqbit sürecinde başlatılır (havuz anahtarı `klip:<infoHash>`; `GET /api/engines` bunu gösterir). Kütüphaneye/İndirilenler'e **eklenmez**, kalıcı kayıt yok. Yalnız seçilen dosya (`only_files`) `data/klipler/gecici/<iş>` klasörüne iner (indirme klasörüne değil). İndirme sınırı yok, yükleme sınırı ayarı uygulanır. Dosya kütüphanede zaten tamamsa motor açılmaz, diskteki dosyadan kesilir (`source: "disk"`).
+- ffprobe rqbit akış adresinden (`/torrents/<ih>/stream/<idx>`, Range) süreyi ve akışları okur; ffmpeg sürenin **%30**'una girdi öncesi `-ss` ile atlar, `-t 60`, **`-c copy`** (yeniden sıkıştırma yok, kalite birebir): ilk video (kapak resmi değil) + ilk ses + altyazılar (metin ve PGS/VobSub kopyalanır, MP4 `mov_text` srt'ye çevrilir, diğerleri atlanır; altyazıyla kesilemezse altyazısız yeniden denenir) + ASS yazı tipleri → `.mkv`. Kopya kesim anahtar kareden başladığı için klip birkaç saniye uzun olabilir. MKV (Cues sonda) ve MP4 (moov sonda) yerel döngüde doğrulandı: rqbit, ffmpeg'in istediği bölgeleri öne alır.
+- Bitince (başarılı/başarısız/iptal) geçici motor kapanır, geçici parçalar silinir. Klip `data/klipler/<id>.mkv` (+ `<id>.json`) olarak **24 saat** tutulur; servis açılışında ve saatte bir temizlenir; aynı içerik (aynı torrent ya da aynı film/bölüm kimliği) kütüphanede tamamlanınca silinir (dakikada bir ve `GET /api/klip`'te denetlenir).
+- Aynı anda **tek iş**. Zaman aşımı 3 dk. Eş yoksa/torrent bilgisi gelmezse: "Bu kaynağın eşi yok ya da yanıt vermiyor; klip alınamadı."
+- ffmpeg/ffprobe: Stremio 5'in kurulum klasöründekiler (kaldırma kaydı HKCU Uninstall, DisplayName "Stremio…" → InstallLocation; yoksa `%LOCALAPPDATA%ProgramsStremio`). `OFFLINE_FFMPEG` (ffmpeg.exe yolu ya da klasörü) verilirse yalnız o kullanılır. Stremio'nun dosyalarına yalnız okuma/çalıştırma.
+
+Uçlar (`:id` 16 onaltılık karakter):
+- `GET /api/klip` → `{ available, reason, ffmpegFrom, job, klips: [klip, …] }`. `available: false` ise `reason` açıklar (arayüzde düğme devre dışı). `job`: çalışan iş ya da `null`; `klips`: hazır klipler (en yeni önce).
+- `POST /api/klip` gövde `{ infoHash, fileIdx, trackers?, type?, id? (Stremio kimliği), title?, fileName?, replace? }` → `201 { existed: false, job }`. Aynı kaynağın (infoHash + fileIdx) hazır klibi ya da süren işi varsa `200 { existed: true, job }`. Başka bir iş sürüyorsa `409 { err, job }`; `replace: true` eskisini iptal edip yenisini başlatır. ffmpeg yoksa `503`. `fileIdx: null` → en büyük video (bölümse o bölüm).
+- `GET /api/klip/:id` → iş: `{ id, state, message, error, infoHash, fileIdx, type, videoId, title, fileName, source, downloadedBytes, peers, durationSec, startSec, lengthSec, doneSec, sizeBytes, startedAt, createdAt, expiresAt, fileUrl }`. `state`: `connecting` (bağlanıyor) → `downloading` (akış açıldı, `downloadedBytes`) → `preparing` (ffmpeg yazıyor, `doneSec/lengthSec`) → `ready` | `error` | `canceled`. Son 20 iş bellekte tutulur.
+- `DELETE /api/klip/:id` → `{ ok: true }`: süren işi iptal eder, hazır klibi siler.
+- `GET|HEAD /api/klip/:id/dosya` → klip (`video/x-matroska`, Range, `206`/`416`). Hazır değilse `409`.
+
+Arayüz: sürüm seçicide inmemiş her satırda "🎬 Klip" (`web/klip.js`); ilerleme satırın altında, hazır olunca "▶ Klibi oynat". Gömülü kipte `oynat` iletisi `playUrl: <servis>/api/klip/<id>/dosya` ile gider (`inject.js` yalnız bu biçimi ve `/play/` adreslerini kabul eder) ve Stremio oynatıcısında **kütüphane kimliği olmadan** (`#/player/<akış>`) açılır: izleme geçmişine film olarak yazılmaz. Tarayıcıda (gömülü değil) `<video>` ile oynatılır, yanında dosya bağlantısı.
+
 ### Eski uçlar (inject.js ve eski panel için korunur)
 - `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
 - `POST /api/download` gövde `{ type, id, infoHash, fileIdx, trackers, title, fileName }` → `{ ok, state, message, item }`. Zaten varsa: tamamlandıysa "Zaten indirilmiş", duraklatılmış/hatalıysa sürdürür, iniyorsa "Zaten iniyor (%x)".
@@ -251,5 +268,7 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 | `OFFLINE_DEBUG_PORT` | Stremio hata ayıklama kapısı (`debugPort`). Sınama kipinde (`OFFLINE_DATA_DIR`) düğme ekleme yalnız bu verilirse açılır |
 | `OFFLINE_STDIN_CONTROL=1` | stdin'den `kapat` satırı gelince temiz kapanır |
 | `OFFLINE_POLL_MS` | Motor durum sorgu aralığı (vars. 1000) |
+| `OFFLINE_FFMPEG` | Klip için ffmpeg.exe yolu ya da klasörü (ffprobe.exe yanında); verilirse yalnız o kullanılır |
+| `OFFLINE_KLIP_TIMEOUT_MS`, `OFFLINE_KLIP_TTL_MS` | Klip işi zaman aşımı (vars. 180000) ve klibin saklanma süresi (vars. 24 saat) |
 
 Sınamalar: `npm test` (yerel döngü, internetsiz; geçici klasörde çalışır, kullanıcı verisine dokunmaz).

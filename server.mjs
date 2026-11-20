@@ -22,6 +22,7 @@ import { Addon } from './lib/addon.mjs'
 import { Api } from './lib/api.mjs'
 import { servePlay } from './lib/play.mjs'
 import { startInjector } from './lib/inject.mjs'
+import { Klip } from './lib/klip.mjs'
 
 // Yakalanmamış hata servisi kapatmaz: günlüğe yazılır, servis sürer.
 // Ayrıca stderr'e de yazılır: başlatıcı (baslat-servis.vbs) stderr'i data\baslatici.log'a ekler, açılışta çökme görünür kalır (E4).
@@ -45,6 +46,7 @@ setLogFile(path.join(cfg.dataDir, 'servis.log'))
 // Kütüphane, ayarlar, motor havuzu ve yöneticiler kapı alındıktan SONRA kurulur (init, listen geri çağrısında):
 // yarışı kaybeden örnek, kazananın dosyalarına (library.json, pid dosyaları) hiç dokunmadan çıkar (E9).
 let library, settings, meta, manager, pool, torrentio, addon, api
+let klip // klip (60 sn örnek): lib/klip.mjs
 function init () {
   library = new Library(cfg.libFile).load()
   // Tek motorlu eski düzenden geçiş (bir kez; eski oturum klasörü yedeklenir, silinmez)
@@ -60,6 +62,7 @@ function init () {
   torrentio = new Torrentio(cfg, meta)
   addon = new Addon({ cfg, manager, torrentio, meta })
   api = new Api({ cfg, manager, torrentio })
+  klip = new Klip({ cfg, manager, torrentio }).start()
 }
 
 const CORS = {
@@ -120,6 +123,7 @@ async function handle (req, res) {
       setTimeout(() => shutdown(0), 100)
       return
     }
+    if (parts[1] === 'klip' && parts.length <= 4) return klip.handle(req, res, parts) // klip uçları kendi yanıtını yazar (dosya sunumu)
     try {
       const [code, body] = await api.handle(req, parts, url)
       return json(res, code, body)
@@ -204,6 +208,7 @@ function shutdown (code = 0) {
   stopping = true
   log('servis kapanıyor')
   try { stopInjector?.() } catch {}
+  try { klip?.stop() } catch {}
   try { manager.stop() } catch {}
   try { pool.stopAll() } catch {}
   try { server.close() } catch {}
