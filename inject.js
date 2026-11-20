@@ -9,7 +9,8 @@
 //  - İndirme Merkezi'nden gelen "oynat" iletisiyle yerel dosyayı Stremio oynatıcısında açma.
 // Stremio'nun sınıf adlarındaki rastgele eklere (ör. "action-buttons-container-XbKVa") bağlı
 // kalınmaz: sınıfın anlamlı kökü aranır (classHas). Beklenen bir yer bulunamazsa düğmeler yedek
-// konuma konur ve konsolda + ekranın sol altında küçük bir uyarı gösterilir.
+// konuma konur ve yalnız konsola (ve servis günlüğüne) yazılır; kullanıcıya uyarı kutusu gösterilmez.
+// Stremio 5.0.28 film sayfası: hero > actions > secondary (Fragman, izlendi, puan, paylaş).
 // Saf kısım (saf) Node'da da çalışır: test/inject.test.mjs.
 // Servis her yüklemede __SURUM__ damgasını koyar; sayfada farklı sürümden eski bir kopya varsa
 // önce o sökülür (servis yeniden başlayınca sayfa yenilemeye gerek kalmaz).
@@ -205,7 +206,7 @@
       clearTimeout(pollTimer)
       if (overlay) { clearTimeout(overlay.timer); overlay = null }
       for (const el of document.querySelectorAll(`[${MARK}], #offline-indir-stil, .oi-badge, .oi-actions, .oi-dl-wrap`)) el.remove()
-      for (const el of [toastEl, warnEl, floatEl]) if (el) el.remove()
+      for (const el of [toastEl, floatEl, navFloat]) if (el) el.remove()
       delete window.__offlineIndirDurum
     }
   }
@@ -221,17 +222,17 @@
 .oi-btn:hover{filter:brightness(1.12)}
 .oi-btn.oi-play{background:#1f9d55}
 .oi-actions{display:flex;flex-wrap:wrap;gap:1rem;margin:0 0 1rem}
-.oi-dl-wrap{display:inline-flex;margin-left:1rem;align-self:center}
+.oi-dl-wrap{display:inline-flex;align-self:center}
+.oi-actions-row .oi-dl-wrap{align-self:stretch}
+.oi-actions-row .oi-btn{height:auto;min-height:3.5rem;align-self:stretch}
 .oi-float{position:fixed;top:6.5rem;right:2rem;z-index:2147483000;display:flex;flex-direction:column;gap:.75rem;align-items:flex-end}
-.oi-badge{position:absolute;left:.5rem;top:.5rem;z-index:5;padding:.25rem .55rem;border-radius:.5rem;font:700 .8rem/1.2 inherit;font-family:inherit;color:#fff;background:#1f9d55;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
+.oi-badge{position:absolute;right:.5rem;top:.5rem;z-index:5;padding:.25rem .55rem;border-radius:.5rem;font:700 .8rem/1.2 inherit;font-family:inherit;color:#fff;background:#1f9d55;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
 .oi-badge.oi-active{background:#7b5bf5}
 .oi-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(5,4,15,.72);display:flex;align-items:center;justify-content:center}
 .oi-frame{width:min(1100px,94vw);height:min(860px,92vh);border:0;border-radius:14px;background:#14121f;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .oi-btn.oi-done{background:#3a2f7a}
-.oi-navfloat{position:fixed;left:5.5rem;top:1.2rem;z-index:2147483000;height:3rem;padding:0 1.3rem;font-size:1rem}
-.oi-nav{cursor:pointer}
-.oi-warn{position:fixed;left:1rem;bottom:1rem;z-index:2147483647;max-width:28rem;padding:.6rem 2rem .6rem .8rem;border-radius:.6rem;font:500 .85rem/1.35 inherit;font-family:inherit;color:#fff;background:#8a5a12;box-shadow:0 6px 20px rgba(0,0,0,.45)}
-.oi-warn button{position:absolute;right:.3rem;top:.3rem;border:0;background:none;color:#fff;cursor:pointer;font-size:1rem}`
+.oi-navfloat{position:fixed;left:5.5rem;bottom:1.2rem;z-index:2147483000;height:3rem;padding:0 1.3rem;font-size:1rem}
+.oi-nav{cursor:pointer}`
   function addStyle () {
     if (document.getElementById('offline-indir-stil')) return
     const s = document.createElement('style')
@@ -255,25 +256,13 @@
     toastTimer = setTimeout(() => { toastEl.style.opacity = '0' }, bad ? 6000 : 4500)
   }
 
-  // ---- yapı değişikliği uyarısı (sessizce bozulmak yerine)
+  // ---- yapı değişikliği uyarısı: yalnız konsola (kullanıcıya kutu gösterilmez; CDP ile
+  // window.__offlineIndirDurum().warnings okunur)
   const warnings = new Map()
-  let warnEl
   function warnOnce (key, msg) {
     if (warnings.has(key)) return
     warnings.set(key, msg)
     console.warn('[Offline İndir] Stremio arayüzü beklenenden farklı:', msg)
-    if (!warnEl) {
-      warnEl = document.createElement('div')
-      warnEl.className = 'oi-warn'
-      warnEl.setAttribute(MARK, 'uyari')
-      const close = document.createElement('button')
-      close.textContent = '✕'
-      close.title = 'Kapat'
-      close.addEventListener('click', () => { warnEl.remove(); warnEl = null })
-      warnEl.append(document.createElement('span'), close)
-      document.body.appendChild(warnEl)
-    }
-    warnEl.firstChild.textContent = 'Offline İndir: Stremio arayüzü değişmiş görünüyor — ' + [...warnings.values()].join('; ') + '. Bazı düğmeler yedek yerde ya da eksik olabilir.'
   }
 
   async function post (path, body) {
@@ -427,6 +416,7 @@
 
   // ---- kütüphane durumu (rozetler ve "Offline oynat" için)
   let index = new Map()
+  let rozetGoster = true // Ayarlar > Görünüm > "Posterlerde rozet göster"
   let pollTimer = null
   async function refresh () {
     clearTimeout(pollTimer)
@@ -434,7 +424,12 @@
     try {
       if (saf.parseRoute(location.hash).name !== 'player') {
         const r = await fetch(API + '/api/items', { cache: 'no-store' })
-        if (r.ok) { index = saf.offlineIndex((await r.json()).items); schedule() }
+        if (r.ok) {
+          const j = await r.json()
+          index = saf.offlineIndex(j.items)
+          rozetGoster = !(j.summary && j.summary.settings && j.summary.settings.showBadges === false)
+          schedule()
+        }
       }
     } catch { /* servis kapalı: son bilinen durum kalır */ }
     if (stopped) return
@@ -548,19 +543,19 @@
     // Başka bir içerik için kalmış ya da gizli (önceki) sayfada kalmış düğmeleri kaldır.
     for (const el of document.querySelectorAll('[data-oi-for]')) if (el.getAttribute('data-oi-for') !== key || !visible(el)) el.remove()
 
-    const actions = visibleByClass('action-buttons-container')
+    const actions = findActions()
     const late = Date.now() - detailSince > 8000
     const useFloat = !actions && late
     if (!actions && !late) return
-    if (useFloat) warnOnce('detay', 'film/dizi sayfasında düğme yeri (action-buttons-container) bulunamadı')
+    if (useFloat) warnOnce('detay', 'film/dizi sayfasında düğme satırı (actions / action-buttons-container) bulunamadı')
+    if (actions) actions.classList.add('oi-actions-row')
 
-    // "İndir" / "Sezonu indir"
+    // "İndir" / "Sezonu indir": her zaman o içeriğin sürüm/sezon seçicisini açar. İndirilenler
+    // listesi yalnız kendi yerinde (gezinme çubuğundaki "İndirilenler") açılır.
     if (!document.querySelector(`[${MARK}="indir"][data-oi-for="${key}"]`)) {
       const b = makeBtn('indir', route.type === 'movie' ? '⬇ İndir' : '⬇ Sezonu indir', '', () => {
         const r = saf.parseRoute(location.hash)
         if (r.name !== 'detail') return
-        // İçerik iniyor ya da inmişse sürüm seçici yerine İndirilenler açılır (D2).
-        if (saf.downloadButton(index.get(r.id), r.type).state !== 'none') { openCenter({ name: 'indirilenler' }); return }
         if (r.type === 'series') r.season = currentSeason(r)
         openCenter(r)
       })
@@ -584,31 +579,31 @@
       dl.classList.toggle('oi-done', st.state === 'done')
     }
 
-    // "Offline oynat" (yalnızca inmiş film)
+    // "Offline oynat" (yalnızca inmiş film): düğme satırının başında
     const e = route.type === 'movie' ? index.get(route.id) : null
     const playable = e && e.done > 0 && e.play
     const existing = document.querySelector(`[${MARK}="oynat"]`)
     if (!playable) { if (existing) (existing.closest('.oi-actions') || existing).remove(); return }
     if (existing) return
-    const info = visibleByClass('meta-info-container')
-    if (!info && !late) return
     const pb = makeBtn('oynat', '▶ Offline oynat', 'oi-play', () => {
       const cur = index.get(route.id)
       if (cur && cur.play) playLocal(cur.play)
     })
     pb.title = 'İnmiş dosyayı internetsiz oynat'
-    if (info && !useFloat) {
-      const bar = document.createElement('div')
-      bar.className = 'oi-actions'
-      bar.setAttribute('data-oi-for', key)
-      pb.setAttribute('data-oi-for', key)
-      bar.appendChild(pb)
-      info.insertBefore(bar, info.firstChild)
-    } else {
-      if (!info && late) warnOnce('ust', 'film sayfasının üst bölümü (meta-info-container) bulunamadı')
-      pb.setAttribute('data-oi-for', key)
-      floatBox().insertBefore(pb, floatBox().firstChild)
-    }
+    pb.setAttribute('data-oi-for', key)
+    if (actions) actions.insertBefore(pb, actions.firstChild)
+    else floatBox().insertBefore(pb, floatBox().firstChild)
+  }
+
+  /** Film/dizi sayfasındaki eylem düğmeleri satırı (Fragman, izlendi, paylaş…). */
+  function findActions () {
+    const old = visibleByClass('action-buttons-container') // Stremio 5.0.2x öncesi
+    if (old) return old
+    // 5.0.28: hero > actions > secondary. Düğme satırı, içinde "secondary" grubu olan "actions".
+    const rows = byClass('actions').filter(visible).filter(el => [...el.children].some(c => saf.classHas(c.getAttribute('class'), 'secondary')))
+    if (rows.length) return rows[rows.length - 1]
+    const sec = visibleByClass('secondary')
+    return sec && sec.querySelector('a[title], [class*="toggle-button"], [class*="rate-button"]') ? sec.parentElement : null
   }
 
   // ---- poster rozetleri
@@ -617,14 +612,16 @@
   function decorateCards (route) {
     let cards = 0
     for (const a of document.querySelectorAll('a[href^="#/detail/"]')) {
-      const img = a.querySelector('img')
-      if (!img) continue
+      // Yalnız poster kartları (poster-image-layer). Ana sayfanın büyük afişindeki başlık logosu da
+      // #/detail/ bağlantısı içinde bir görsel; ona rozet konmaz.
+      const host = byClass('poster-image-layer', a)[0]
+      const img = host && host.querySelector('img')
+      let badge = a.querySelector('.oi-badge')
+      if (!img) { if (badge) badge.remove(); continue }
       cards++
       const r = saf.parseRoute(a.getAttribute('href'))
-      const info = r.name === 'detail' ? saf.badgeInfo(index.get(r.id)) : null
-      let badge = a.querySelector('.oi-badge')
+      const info = r.name === 'detail' && rozetGoster ? saf.badgeInfo(index.get(r.id)) : null
       if (!info) { if (badge) badge.remove(); continue }
-      const host = img.parentElement
       if (!badge) {
         badge = document.createElement('div')
         badge.setAttribute(MARK, 'rozet')
@@ -689,13 +686,12 @@
     // Yinelenenleri ve gizli çubuklarda kalanları temizle.
     for (const el of document.querySelectorAll(`[${MARK}="nav"]`)) if (!visible(el)) el.remove()
     if (shown) { dropNavFloat(); return }
-    // Çubuk yok. Çubuğu olması gereken sayfada (ana ekran, keşif, kütüphane…) kısa süre bekle, hâlâ
-    // yoksa yapı değişmiştir: uyar. Film/dizi sayfası gibi çubuğu hiç olmayan sayfalarda uyarı yok,
-    // doğrudan köşede sabit düğme gösterilir.
-    if (NAV_ROUTES.has(route.name)) {
-      if (Date.now() - navSince < 8000) return
-      warnOnce('nav', 'gezinme çubuğu (nav-tab-button-container) bulunamadı, "İndirilenler" köşede sabit düğme olarak gösteriliyor')
-    }
+    // Çubuk yok. Film/dizi sayfası gibi çubuğu hiç olmayan sayfalarda hiçbir şey eklenmez (köşedeki
+    // hap düğmesi başlığın üstüne biniyordu). Çubuğu olması gereken sayfada (ana ekran, keşif,
+    // kütüphane…) kısa süre beklenir, hâlâ yoksa yapı değişmiştir: sol altta yedek düğme.
+    if (!NAV_ROUTES.has(route.name)) { dropNavFloat(); return }
+    if (Date.now() - navSince < 8000) return
+    warnOnce('nav', 'gezinme çubuğu (nav-tab-button-container) bulunamadı, "İndirilenler" sol altta yedek düğme olarak gösteriliyor')
     if (!navFloat || !navFloat.isConnected) {
       navFloat = makeBtn('nav-yedek', '⬇ İndirilenler', 'oi-navfloat', openDownloads)
       document.body.appendChild(navFloat)
