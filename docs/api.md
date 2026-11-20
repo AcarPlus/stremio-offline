@@ -104,6 +104,10 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - `applyToAll: true`: varsayılanı **bütün** öğelere yazar (çalışanlara hemen uygulanır).
   - `uploadLimit`: yükleme sınırı; her süreç için ayrı uygulanır (N etkin indirme ≈ N × sınır). Bitmiş indirme zaten yükleme yapmaz (süreci kapatılır).
   - Kalıcı: `data/ayarlar.json`. İlk değerler `config.json` (`downloadLimit`, `uploadLimit`) ya da `OFFLINE_RATELIMIT_DOWN`/`OFFLINE_RATELIMIT_UP`'tan gelir; arayüzden değiştirilen değer sonra geçerlidir.
+### İndirme klasörü (sonradan değiştirilebilir)
+- `GET /api/settings` artık ayrıca `downloadDir` (geçerli klasör) ve `autoUpdateCheck` döndürür. `POST /api/settings` gövdesinde `"downloadDir": "D:\\Filmler"` verilirse: yol **mutlak** olmalı (`C:\Filmler` ya da `\\sunucu\paylaşım`), yoksa oluşturulur, yazılabilir olmalı (deneme dosyası yazılıp silinir); hatalıysa `400 { err }` (Türkçe, ör. "Bu klasöre yazılamıyor…") ve hiçbir alan uygulanmaz. Kalıcıdır (`data/ayarlar.json` `downloadDir`); kayıtlı değer `config.json`/`OFFLINE_DOWNLOAD_DIR`'dan önceliklidir. Kayıtlı klasör sonradan kullanılamaz olursa servis varsayılanla açılır, dosyadaki değer ezilmez.
+- **Yalnız yeni indirmelere uygulanır.** Her öğe eklendiği anki klasörü kaydında saklar (`downloadDir`; önceki sürümden kalan öğeler ilk açılışta o günkü klasörle işaretlenir). Süren, duraklatılmış ve biten indirmeler eski yerinde kalır: sürdürme (motor aynı `output_folder` ile yeniden eklenir), oynatma (`files[].path`), İndirilenler, "Offline oynat", silme hep öğenin kendi yolunu kullanır. `GET /api/status` ve `/api/library` `downloadDir`'i yeni indirmelerin gideceği klasördür; boş disk bu klasörün diskidir.
+- `POST /api/klasor-sec` (gövdesiz) → sunucu **kullanıcının masaüstünde** gizli bir PowerShell (`-STA`) ile Windows klasör seçme penceresini açar (en önde, mevcut klasörde başlar). Yanıt `{ "path": "D:\\Filmler" }` ya da iptalde `{ "cancelled": true }`; seçmek ayarı değiştirmez, ardından `POST /api/settings` çağrılır. Pencere açıkken ikinci çağrı `409`, pencere açılamazsa `502` (arayüz elle yol girişine düşer; 5 dk cevapsız kalırsa iptal sayılır). `OFFLINE_KLASOR_SECICI`: pencere yerine çalıştırılacak program (`.mjs/.js` node ile; stdout'a seçilen yolu yazar, boş çıktı = iptal). **Sınama kipinde bu değişken yoksa gerçek pencere açılmaz** (`503`).
 - `POST /api/items/:id/priority` gövde `{ "priority": true | false }` → öğe. **Öncelik**: aynı anda en çok bir öğe öncelikli olur (yenisi verilince önceki kalkar). Öncelikli öğe **gerçekten veri alırken** (motor canlı ve indirilen bayt son 10 sn içinde artmış; metadata beklerken ya da takılıyken kısma yok, kısma başladıktan sonra 20 sn hiç ilerleme olmayınca kalkar: salınım yok; ★ işareti kalır, `priorityIdle` gösterir) diğer etkin (`resolving`/`downloading`) indirmelerin etkin sınırı `min(kayıtlı sınır, priorityThrottle)` olur; durmazlar, kayıtlı `downloadLimit` değişmez (`throttled`, `effectiveLimit` alanları gösterir). Öncelikli öğe duraklatılınca, bitince, silinince ya da öncelik kaldırılınca diğerleri kendi sınırlarına döner (duraklatmada işaret kalır, sürdürülünce kısma yeniden başlar; bitince/silinince işaret kalkar). Tamamlanmış öğeye `409`. Kalıcıdır.
 - **Oynatma muafiyeti:** `/play/...` ile bir indirmeden **akış** (stream/Range) sunulurken o indirme hem öncelik kısmasından hem kendi kayıtlı sınırından muaftır: etkin sınır sınırsızdır (`playing: true`, `effectiveLimit: 0`, `throttled: false`). Muafiyet açık akış bağlantısı sayısına bağlıdır (uzun Range isteği sürerken sürer) ve son bağlantı kapandıktan 30 sn sonra kalkar (`playGraceMs` / `OFFLINE_PLAY_GRACE_MS`); sınırlar eski hesabına döner, kayıtlı `downloadLimit` hiç değişmez. Oynatılan öğe başkasını kısmaz (öncelik işareti değişmez). Yükleme sınırına dokunulmaz. Diskten sunulan (tamamlanmış) dosyada motor olmadığı için etkisi yoktur.
 - `POST /api/settings` `{ "priorityThrottle": 200000 }`: kısma hızı (vars. 200 KB/sn; `0` = öncelik kimseyi kısmaz), kalıcı, çalışan süreçlere hemen uygulanır.
@@ -156,6 +160,23 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
   - Dosya tamamsa **diskten** sunulur (motor gerekmez, internetsiz çalışır).
   - Değilse motorun akışından sunulur: `Range` desteklenir, inmemiş bir yere atlamak o bölgeyi öne alır. Öğe kütüphanede yoksa yalnızca son 6 saatte bir Torrentio listesinde görülmüş hash için oluşturulur (başka hash için `404`, indirme başlamaz); duraklatılmışsa sürdürülür, dosya seçili değilse seçime eklenir (Stremio'daki "İndir+Oynat" davranışı).
   - `HEAD` desteklenir; aralık dışı `416`. Yanıtta `Accept-Ranges: bytes`, `Content-Type` uzantıya göre.
+
+### Bilgisayarı kapatma zamanlayıcısı
+(`POST /api/kapat` **servisi** kapatır; bu uç **bilgisayarı**. Yalnızca servisin kendi sayfasından / kaynaksız yerel istek; Stremio kökeni `POST` yapamaz.)
+- `GET /api/kapat-zamanla` → `{ armed, countdown, phase: "kapali" | "bekliyor" | "geri-sayim", secondsLeft, endsAt, active, simulated, message }`.
+- `POST /api/kapat-zamanla` gövde `{ "enabled": true | false }` (boolean zorunlu, aksi `400`) → aynı durum. **Bellekte tutulur, kalıcı değildir** (servis yeniden başlayınca kapalı); tetiklenince kendini kapatır.
+  - `true`: **etkin (`resolving`/`downloading`) indirme yoksa `409`** (karar: böyle bir anahtar ya hemen kapatır ya da haftalarca gizlice bekler; ikisi de sürpriz). Etkin indirme varken açılır.
+  - Tetikleme: açıldıktan sonra etkin indirme kalmayınca (2 ardışık denetim, `OFFLINE_KAPAT_KONTROL_MS`, vars. 2 sn) **ve açıldıktan sonra en az bir indirme tamamlanmışsa**. Duraklatılmış/hatalı öğeler beklenmez. Hiçbiri tamamlanmadan etkin indirme kalmazsa (hepsi duraklatıldı/iptal/hata) bilgisayar kapatılmaz, anahtar kendiliğinden kapanır (`message` açıklar).
+  - Tetiklenince `shutdown.exe /s /t 60 /c "Stremio Offline: indirmeler bitti…"` çalışır (Windows'un kendi geri sayımı); `phase: "geri-sayim"`, `secondsLeft`. Komut başarısızsa bilgisayar kapanmaz, `message` söyler.
+  - `false`: zamanlamayı kapatır; geri sayım sürüyorsa `shutdown.exe /a` ile iptal eder (iptal edilemezse `502`; elle `shutdown /a`).
+  - **Güvenlik:** gerçek `shutdown.exe`'ye yalnız sınama kipi DEĞİLken ve `OFFLINE_KAPATMA_KOMUTU` verilmemişken gidilir. `OFFLINE_KAPATMA_KOMUTU` bir program/betik yoludur (`.mjs/.js` node ile), aynı bağımsız değişkenlerle (`/s /t 60 /c …`, `/a`) çalışır. Sınama kipinde (`OFFLINE_DATA_DIR`) değişken yoksa **hiçbir program çalışmaz**: yalnız günlüğe yazılır, `simulated: true` sahte geri sayım görünür.
+
+### Güncelleme denetimi
+`package.json` sürümü ile GitHub'ın son sürümü (`https://api.github.com/repos/<updateRepo>/releases/latest`, `config.json` `updateRepo`, vars. `AcarPlus/stremio-offline`) karşılaştırılır; `tag_name` "v1.2.0" biçimi, basit sayısal semver (ön ek/son ek yok sayılır). **Otomatik indirme/kurma yok**, yalnız bilgi.
+- `GET /api/guncelleme` → son durum: `{ current, status, available, latest, tag, url, checkedAt, error, autoUpdateCheck, repo }`. `status`: `hic` (henüz denetlenmedi) | `guncel` | `yeni` (`available: true`; `url` sürüm sayfası, yalnız `https://`) | `surum-yok` (depo yayında değil / 404: normal) | `denetlenemedi` (ağ yok, zaman aşımı, 5xx, bozuk yanıt: sessiz, `error` kısa neden).
+- `POST /api/guncelleme/denetle` (gövdesiz) → denetler (en çok 10 sn) ve aynı durumu döndürür.
+- Otomatik: servis açılışından ~1 dk sonra ve 24 saatte bir, `autoUpdateCheck` açıksa (vars. açık, kalıcı; `POST /api/settings { "autoUpdateCheck": false }`). İstekte `User-Agent: stremio-offline`, başka kimlik bilgisi yok. Arayüz yeni sürümde İndirme Merkezi'nde şerit gösterir (sürüm sayfası yeni sekmede).
+- Sınama: adres `OFFLINE_GUNCELLEME_URL` ile yerel sahte sunucuya yönlenir (`OFFLINE_GUNCELLEME_ILK_MS`, `OFFLINE_GUNCELLEME_ARALIK_MS` zamanlamayı kısaltır). Sınama kipinde (`OFFLINE_DATA_DIR`) bu adres yoksa ağa hiç çıkılmaz ve otomatik denetim kurulmaz.
 
 ### Eski uçlar (inject.js ve eski panel için korunur)
 - `POST /api/kapat` → `{ ok: true }`, ardından servis temiz kapanır (motor süreçleri de). Yalnızca kaynaksız yerel istek ya da servisin kendi sayfası; Stremio kökeni `403`. `durdur-servis.ps1` bunu kullanır (Windows'ta SIGTERM yoktur).
@@ -218,6 +239,7 @@ Gömülü olmayan kipte "oynat" aynı `playUrl`'i yeni sekmede açar. Ana pencer
 | `metadataTimeoutSec` | 90 | |
 | `downloadLimit` | 0 | yeni indirmeler için varsayılan sınırın **ilk değeri**, bayt/sn, 0 sınırsız (sonrası `data/ayarlar.json`) |
 | `uploadLimit` | 100000 | yükleme sınırının ilk değeri, bayt/sn, süreç başına |
+| `updateRepo` | `AcarPlus/stremio-offline` | güncelleme denetimi için GitHub deposu (`sahip/depo`) |
 | `priorityThrottle` | 200000 | öncelik varken diğer etkin indirmelerin kısıldığı hız, ilk değer (sonrası `data/ayarlar.json`) |
 
 UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`--disable-dht-persistence`; aynı anda birden çok süreç böylece çakışmaz). Motor oturum kalıcılığı kapalıdır (`--disable-persistence`): doğruluk kaynağı `library.json` + `.torrent` önbelleği (`data/torrents/`); süreç her başladığında torrent aynı klasöre yeniden eklenip doğrulanır. Günlükler: kontrol `data/rqbit/rqbit.log`, indirme süreçleri `data/rqbit/motorlar/<yuva>/rqbit.log` (pid dosyası da orada); servis günlüğü `data/servis.log`. Eski tek oturum (`data/rqbit/oturum`) ilk açılışta `data/rqbit/oturum.v1-yedek` olarak kenara alınır.
@@ -227,7 +249,10 @@ UPnP kapalıdır (`--disable-upnp-port-forward`), DHT durumu diske yazılmaz (`-
 | Değişken | Etki |
 |---|---|
 | `OFFLINE_DATA_DIR` | Veri klasörü. Verilirse kökteki `config.json` **okunmaz/yazılmaz**, indirme klasörü varsayılanı `<veri>/indirilenler` olur. Sınama kipinde gerçek servisin kapı aralığına girilmesin diye `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT`, `OFFLINE_ENGINE_API_BASE`, `OFFLINE_ENGINE_PEER_BASE` **zorunludur** (eksikse servis hata verip açılmaz). |
-| `OFFLINE_DOWNLOAD_DIR` | İndirme klasörü |
+| `OFFLINE_DOWNLOAD_DIR` | İndirme klasörünün ilk değeri (arayüzden kaydedilen klasör bundan önceliklidir) |
+| `OFFLINE_KAPATMA_KOMUTU`, `OFFLINE_KAPAT_KONTROL_MS` | Bilgisayarı kapatma programı (sınama kipinde yoksa hiçbir şey çalışmaz) ve denetim aralığı |
+| `OFFLINE_GUNCELLEME_URL`, `OFFLINE_GUNCELLEME_ILK_MS`, `OFFLINE_GUNCELLEME_ARALIK_MS`, `OFFLINE_GUNCELLEME_REPO` | Güncelleme denetimi adresi (sahte sunucu) ve zamanlaması; `updateRepo` karşılığı |
+| `OFFLINE_KLASOR_SECICI` | `POST /api/klasor-sec` için sahte program (sınama kipinde yoksa pencere hiç açılmaz) |
 | `OFFLINE_PORT`, `OFFLINE_RQBIT_PORT`, `OFFLINE_PEER_PORT` | Kapılar |
 | `OFFLINE_PEER_LISTEN_IP` | `peerListenIp` (boş = rqbit varsayılanı) |
 | `OFFLINE_TORRENTIO_URL`, `OFFLINE_METADATA_TIMEOUT`, `OFFLINE_RATELIMIT_DOWN`, `OFFLINE_RATELIMIT_UP` | Ayar karşılıkları (`downloadLimit`, `uploadLimit`: ilk değer) |

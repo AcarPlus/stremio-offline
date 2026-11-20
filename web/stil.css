@@ -228,3 +228,18 @@ html.gomulu .bildirimler { top: 52px; }
 .dugme.oncelik[aria-pressed="true"] { background: #3a2f12; color: var(--uyari); border-color: var(--uyari); }
 .kart.oncelikli { border-color: #6b5a24; }
 .kisildi { color: var(--uyari); font-size: 12.5px; }
+
+/* Ayar satırları: indirme klasörü, kapatma, güncelleme */
+.klasorSatiri { gap: 8px 12px; }
+.klasorYol { font-size: 13px; color: var(--metin); background: var(--bg); border: 1px solid var(--cizgi); border-radius: 8px; padding: 5px 10px; max-width: 100%; overflow-wrap: anywhere; }
+.klasorGiris { flex: 1 1 260px; min-width: 0; background: var(--bg); border: 1px solid var(--cizgi); border-radius: 8px; padding: 6px 10px; min-height: 34px; color: var(--metin); }
+.klasorGiris:focus { border-color: var(--vurgu); outline: none; }
+.klasorNot { font-size: 12.5px; }
+
+.kapatSatiri { gap: 8px 12px; }
+.kapatSatiri.uyarili { border-color: #7a2a2a; background: #2c1717; }
+.kapatSatiri .sinirEtiket { cursor: pointer; }
+
+.guncelSatiri { gap: 8px 12px; }
+.yeniSurum { border-color: var(--vurgu); }
+.yeniSurum a { font-weight: 700; }

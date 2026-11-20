@@ -29,7 +29,7 @@ describe('sınır ve ayar doğrulaması', () => {
     assert.equal((await svc.item(ih)).downloadLimit, 2000000, 'applyToAll uygulanmadı')
     // Hepsi geçerliyse hepsi uygulanır
     const s1 = await svc.api('POST', '/api/settings', { defaultDownloadLimit: 123456, uploadLimit: 0, priorityThrottle: 1000 })
-    assert.deepEqual(s1, { defaultDownloadLimit: 123456, uploadLimit: 0, priorityThrottle: 1000 })
+    assert.deepEqual(s1, { defaultDownloadLimit: 123456, uploadLimit: 0, priorityThrottle: 1000, downloadDir: sc.downloadDir, autoUpdateCheck: true })
     assert.equal(JSON.parse(fs.readFileSync(file(), 'utf8')).defaultDownloadLimit, 123456)
   })
 
