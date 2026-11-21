@@ -286,3 +286,7 @@ dialog.galeri::backdrop { background: rgba(5,4,12,.85); }
 .galeriBuyuk { display: flex; flex-direction: column; gap: 8px; }
 .galeriBuyuk img { width: 100%; max-height: calc(100vh - 160px); object-fit: contain; background: #000; border-radius: 8px; cursor: zoom-out; }
 .galeriGezin { display: flex; gap: 8px; align-items: center; justify-content: center; }
+/* Uygulama içi güncelleme ilerlemesi (guncelleDugmesi) */
+.guncelDurum { display: inline-flex; align-items: center; gap: 8px; color: var(--metin); font-weight: 600; font-size: 13.5px; flex-wrap: wrap; }
+.guncelDurum:empty { display: none; }
+.guncelDurum progress { width: 160px; height: 8px; accent-color: var(--vurgu); }

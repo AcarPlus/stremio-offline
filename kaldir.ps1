@@ -30,6 +30,10 @@ if ($ServisiDurdur) {
     $bulunan = Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
         Where-Object { $_.CommandLine -and $_.CommandLine.Contains('server.mjs') }
     foreach ($p in $bulunan) {
+        # Başka bir kurulumun paketle gelen node'u (<kök>\node\node.exe, kök bu klasör değil) ise o kurulumun servisidir:
+        # dokunulmaz (ör. exe kurulumu eski zip/klasör kurulumunu kaldırırken yeni servis kapanmasın).
+        $exe = [string]$p.ExecutablePath
+        if ($exe -match '\\node\\node\.exe$' -and -not $exe.StartsWith((Join-Path $root 'node\'), [StringComparison]::OrdinalIgnoreCase)) { continue }
         # Çalışma klasörü bilinemediğinden, yalnızca bu klasördeki servisin kapısını dinleyen süreç durdurulur.
         $kapi = 11480
         try { $c = Get-Content (Join-Path $root 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json; if ($c.port) { $kapi = $c.port } } catch {}

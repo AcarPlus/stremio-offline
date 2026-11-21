@@ -102,10 +102,10 @@ async function api (path, opts) {
   try { r = await fetch(path, opts) } catch { throw new Error('Servise ulaşılamıyor. İndirme servisi çalışıyor mu?') }
   let j = null
   try { j = await r.json() } catch {}
-  if (!r.ok) throw new Error((j && j.err) || `Sunucu hatası (${r.status})`)
+  if (!r.ok) throw Object.assign(new Error((j && j.err) || `Sunucu hatası (${r.status})`), { status: r.status })
   return j
 }
-const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+const post =(path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
 
 function toast (metin, tur = '') {
   const el = h('div', { class: 'bildirim ' + tur, role: tur === 'hata' ? 'alert' : 'status' }, metin)
@@ -164,7 +164,44 @@ function kapatKontrolu ({ ozet = false } = {}) {
  */
 function guncelleDugmesi (g, durum) {
   const b = h('button', { type: 'button', class: 'dugme kucuk' }, 'Şimdi güncelle')
-  const yaz = t => { durum.textContent = t }
+  // İlerleme: düğmenin yanında çubuk + yazı (soluk değil, gözden kaçmasın)
+  durum.className = 'guncelDurum'
+  const cubuk = h('progress', { max: '100', 'aria-label': 'Güncelleme ilerlemesi' })
+  const yazi = h('span', { role: 'status' })
+  const goster = (t, yuzde) => {
+    durum.hidden = false
+    if (yuzde == null) cubuk.removeAttribute('value'); else cubuk.value = yuzde
+    yazi.textContent = t
+    if (!durum.contains(cubuk)) durum.replaceChildren(cubuk, ' ', yazi)
+  }
+  const temizle = () => { durum.replaceChildren(); b.disabled = false; b.textContent = 'Şimdi güncelle' }
+  let izleniyor = false
+  /** Güncelleme sürüyor: düğme kilitli, saniyede bir durum; yeni sürüm açılınca sayfa yenilenir. */
+  function izle () {
+    if (izleniyor) return
+    izleniyor = true
+    b.disabled = true
+    b.textContent = 'Güncelleniyor…'
+    goster('Güncelleme başladı…', null)
+    const bitis = Date.now() + 10 * 60 * 1000
+    const boyut = g.setupSize ? ' / ' + fmtBytes(g.setupSize) : ''
+    const tur = async () => {
+      if (!b.isConnected && !durum.isConnected) { izleniyor = false; return }
+      if (Date.now() > bitis) { goster('Güncelleme uzun sürdü; sayfayı yenile.', 0); b.disabled = false; izleniyor = false; return }
+      let d = null
+      try { d = await api('/api/guncelleme') } catch {}
+      if (d && d.current !== g.current) { goster('✔ Güncellendi: v' + d.current + '. Sayfa yenileniyor…', 100); setTimeout(() => location.reload(), 1200); return }
+      if (d && d.kurulum?.asama === 'hata') { temizle(); izleniyor = false; toast('Güncelleme kurulamadı: ' + d.kurulum.hata, 'hata'); return }
+      if (d && d.kurulum?.asama === 'indiriliyor') {
+        const y = d.kurulum.yuzde || 0
+        goster(`Yeni sürüm indiriliyor: %${y}` + (g.setupSize ? ` (${fmtBytes(g.setupSize * y / 100)}${boyut})` : ''), y)
+      } else goster('Kuruluyor… servis birkaç saniye kapanır, sayfa kendiliğinden yenilenecek.', null)
+      setTimeout(tur, 1000)
+    }
+    tur()
+  }
+  // Sayfa güncelleme sürerken açıldıysa (ya da başka sekmede başlatıldıysa) ilerlemeyi hemen göster
+  if (g.kurulum && (g.kurulum.asama === 'indiriliyor' || g.kurulum.asama === 'baslatildi')) setTimeout(izle, 0)
   b.addEventListener('click', async () => {
     const r = await onayla({
       baslik: 'Güncellensin mi?',
@@ -173,19 +210,14 @@ function guncelleDugmesi (g, durum) {
     })
     if (!r.ok) return
     b.disabled = true
-    try { await post('/api/guncelleme/kur') } catch (e) { toast(e.message, 'hata'); b.disabled = false; return }
-    const bitis = Date.now() + 10 * 60 * 1000
-    const tur = async () => {
-      if (Date.now() > bitis) { yaz('Güncelleme uzun sürdü; sayfayı yenile.'); b.disabled = false; return }
-      let d = null
-      try { d = await api('/api/guncelleme') } catch {}
-      if (d && d.current !== g.current) { yaz('Güncellendi: v' + d.current); setTimeout(() => location.reload(), 800); return }
-      if (d && d.kurulum?.asama === 'hata') { yaz(''); toast('Güncelleme kurulamadı: ' + d.kurulum.hata, 'hata'); b.disabled = false; return }
-      if (d && d.kurulum?.asama === 'indiriliyor') yaz('İndiriliyor… %' + (d.kurulum.yuzde || 0))
-      else yaz('Kuruluyor… sayfa birazdan kendiliğinden yenilenecek')
-      setTimeout(tur, 1000)
+    try {
+      await post('/api/guncelleme/kur')
+      toast('Güncelleme başladı: yeni sürüm indiriliyor. Bitince sayfa kendiliğinden yenilenecek.', 'ok')
+    } catch (e) {
+      // Zaten sürüyorsa (başka düğmeden/sekmeden başlatıldı) hata değil: ilerlemeyi göster
+      if (e.status !== 409 || !/sürüyor/.test(e.message)) { toast(e.message, 'hata'); b.disabled = false; return }
     }
-    tur()
+    izle()
   })
   return b
 }

@@ -63,8 +63,8 @@ Source: "{#Kaynak}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cre
 [Run]
 ; ilk kurulum: Stremio'yu düğmeli aç (servisi de başlatır)
 Filename: "{sys}\wscript.exe"; Parameters: "//B //Nologo ""{app}\baslat-stremio.vbs"""; Description: "{cm:AcStremio}"; Flags: nowait postinstall skipifsilent
-; uygulama içi güncelleme (/UPDATE): servisi gizli yeniden başlat (Stremio'daki düğmeler kendiliğinden yenilenir)
-Filename: "{sys}\wscript.exe"; Parameters: "//B //Nologo ""{app}\baslat-servis.vbs"" ""{app}\node\node.exe"""; Flags: nowait runhidden; Check: GuncellemeMi
+; uygulama içi güncellemede (/UPDATE) servis CurStepChanged(ssPostInstall) içinde, geçiş ve kısayollardan SONRA başlar:
+; [Run] girdileri ssPostInstall'dan önce çalışır, burada başlatılırsa eski kurulumun kaldir.ps1'i yeni servisi kapatabilir.
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\kaldir.ps1"" -ServisiDurdur"; Flags: runhidden waituntilterminated; RunOnceId: "StremioOfflineKaldir"
@@ -114,6 +114,10 @@ begin
   rc := PowerShell(ExpandConstant('{app}\kur.ps1'), '');
   if rc <> 0 then
     SuppressibleMsgBox(FmtMessage(CustomMessage('KurHata'), [IntToStr(rc), ExpandConstant('{app}\data\baslatici.log')]), mbError, MB_OK, IDOK);
+  // Uygulama içi güncelleme: servisi şimdi başlat (Stremio'daki düğmeler servis açılınca kendiliğinden yenilenir)
+  if GuncellemeMi() then
+    Exec(ExpandConstant('{sys}\wscript.exe'), '//B //Nologo "' + ExpandConstant('{app}\baslat-servis.vbs') + '" "' +
+      ExpandConstant('{app}\node\node.exe') + '"', '', SW_HIDE, ewNoWait, rc);
 end;
 
 // Kaldırmadan önce servis durur (dosyalar kilitli kalmasın)
