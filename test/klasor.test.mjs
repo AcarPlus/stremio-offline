@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { startSeeder, startService, serviceConfig, cleanService, waitFor, readRange, killAll, TEST_DIR, MiB } from './harness.mjs'
 import { FILM, KLIP, sourcePath, readSource } from './fixture.mjs'
-import { denetleKlasor, klasorSec } from '../lib/klasor.mjs'
+import { denetleKlasor, klasorSec, korumaIpucu, yazmaEngeliMi } from '../lib/klasor.mjs'
 
 describe('denetleKlasor (birim)', () => {
   const kok = path.join(TEST_DIR, 'klasor-birim')
@@ -32,6 +32,15 @@ describe('denetleKlasor (birim)', () => {
     fs.writeFileSync(dosya, 'x')
     assert.throws(() => denetleKlasor(dosya), e => e.status === 400 && /oluşturulamadı|klasör değil/.test(e.message))
     assert.throws(() => denetleKlasor(path.join(dosya, 'alt')), e => e.status === 400)
+  })
+
+  test('Denetimli klasör erişimi engeli tanınır ve izin verilecek programlar adıyla söylenir', { skip: process.platform !== 'win32' }, () => {
+    for (const k of ['ENOENT', 'EPERM', 'EACCES', 'error adding torrent: Sistem belirtilen dosyayı bulamıyor. (os error 2)', 'x (os error 5)']) assert.ok(yazmaEngeliMi(k), k)
+    for (const k of ['', 'ENOSPC', 'rqbit zaman aşımı: POST /torrents', '(os error 22)', '(os error 123)']) assert.ok(!yazmaEngeliMi(k), k)
+    const ip = korumaIpucu(['C:\\x\\rqbit.exe', 'C:\\x\\rqbit.exe'])
+    assert.match(ip, /Denetimli klasör erişimi/)
+    assert.ok(ip.includes(process.execPath) && ip.includes('C:\\x\\rqbit.exe'))
+    assert.equal(ip.split('rqbit.exe').length, 2, 'aynı program bir kez yazılır')
   })
 
   test('sınama kipinde program verilmediyse seçici pencere açılmaz (503)', async () => {

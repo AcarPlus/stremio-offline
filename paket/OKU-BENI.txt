@@ -52,5 +52,9 @@ SORUN OLURSA
   İndirme motorunun günlükleri: data\rqbit\ altında rqbit.log dosyaları.
 - Antivirüs ya da "Akıllı Uygulama Denetimi" bin\rqbit.exe dosyasını engellerse indirme başlamaz;
   bu durumda bin\rqbit.exe için izin ver ya da sorunu bildir.
+- İndirme "os error 2" ya da "Bu klasöre yazılamıyor" hatasıyla başlamıyorsa Windows Güvenliği'ndeki
+  "Denetimli klasör erişimi" Videolar/Belgeler gibi klasörleri koruyordur. Ya korumasız bir klasör seç
+  (örneğin D:\Filmler) ya da Windows Güvenliği > Virüs ve tehdit koruması > Fidye yazılımı korumasını yönet >
+  "Denetimli klasör erişimi üzerinden uygulamaya izin ver" bölümünden bin\rqbit.exe ve node.exe'ye izin ver.
 
 Sorun bildirmek ve yeni sürümler: https://github.com/AcarPlus/stremio-offline
