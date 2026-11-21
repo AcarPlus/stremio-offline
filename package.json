@@ -1,6 +1,6 @@
 {
   "name": "stremio-offline",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Download Stremio movies and series to your PC and watch them offline (Stremio 5, Windows)",
   "main": "server.mjs",
   "scripts": {
