@@ -1,20 +1,26 @@
-﻿# Paylaşım paketi üretir: dist\StremioOffline\ (temiz klasör) + dist\StremioOffline.zip
+﻿# Kurulum programını üretir: dist\StremioOffline\ (temiz uygulama klasörü) + dist\StremioOffline-Kurulum.exe
 # Pakete girer: servis kodu (server.mjs, lib, web, inject.js, package.json), başlatma/kurulum betikleri,
-#   bin\rqbit.exe (yerelden), node\node.exe (bu makinede kurulu Node'dan kopya; taşınabilir),
-#   paket\ altındaki KUR.cmd (paket kökünde TEK dosya), KALDIR.cmd ve OKU-BENI.txt (uygulama\ içine).
-# Düzen: StremioOffline\KUR.cmd + StremioOffline\uygulama\ (geri kalan her şey; kurulum kökü burası).
+#   bin\rqbit.exe (yerelden), node\node.exe (bu makinede kurulu Node'dan kopya; taşınabilir), paket\OKU-BENI.txt.
+# Kurulum programı (kurulum\stremio-offline.iss, Inno Setup 6) bu klasörü %LOCALAPPDATA%\Programs\StremioOffline'a kurar.
 # Girmez: data\, config.json (kişisel ayar), .git, node_modules, test, tools, docs, günlükler.
 # İnternetten hiçbir şey indirmez. Sonda paket içeriğinde kişisel veri taraması yapar; bulursa hata verir.
 param(
     [string]$Cikti = (Join-Path $PSScriptRoot 'dist'),
-    [string]$NodeExe = ''
+    [string]$NodeExe = '',
+    [string]$IsccExe = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $ad = 'StremioOffline'
 $kok = Join-Path $Cikti $ad
-$hedef = Join-Path $kok 'uygulama'
-$zip = Join-Path $Cikti ($ad + '.zip')
+$hedef = $kok
+$exe = Join-Path $Cikti 'StremioOffline-Kurulum.exe'
+$appSurum = (Get-Content (Join-Path $root 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
+if (-not $IsccExe) {
+    $IsccExe = @((Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'), (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+        (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+}
+if (-not $IsccExe -or -not (Test-Path $IsccExe)) { throw 'Inno Setup 6 (ISCC.exe) bulunamadı; -IsccExe ile yol ver.' }
 
 # Node: verilen yol > PATH'teki node. Sürüm package.json "engines" (>=22) ile uyumlu olmalı.
 if (-not $NodeExe) { $NodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source }
@@ -25,11 +31,11 @@ $rqbit = Join-Path $root 'bin\rqbit.exe'
 if (-not (Test-Path $rqbit)) { throw "rqbit bulunamadı: $rqbit" }
 
 if (Test-Path $kok) { Remove-Item $kok -Recurse -Force }
-if (Test-Path $zip) { Remove-Item $zip -Force }
+if (Test-Path $exe) { Remove-Item $exe -Force }
 New-Item -ItemType Directory -Force $hedef | Out-Null
 
 $dosyalar = 'server.mjs', 'inject.js', 'package.json', 'kur.ps1', 'kaldir.ps1', 'stremio-baslat.ps1', 'ortak.ps1', 'kisayol-onar.ps1',
-    'baslat-servis.vbs', 'baslat-stremio.vbs', 'baslat.cmd'
+    'durdur-servis.ps1', 'zipten-gecis.ps1', 'baslat-servis.vbs', 'baslat-stremio.vbs', 'baslat.cmd'
 foreach ($f in $dosyalar) { Copy-Item (Join-Path $root $f) $hedef }
 foreach ($d in 'lib', 'web') {
     New-Item -ItemType Directory -Force (Join-Path $hedef $d) | Out-Null
@@ -39,9 +45,9 @@ foreach ($d in 'lib', 'web') {
 New-Item -ItemType Directory -Force (Join-Path $hedef 'bin'), (Join-Path $hedef 'node') | Out-Null
 Copy-Item $rqbit (Join-Path $hedef 'bin')
 Copy-Item $NodeExe (Join-Path $hedef 'node\node.exe')
-# paket\ dosyaları: KUR.cmd paket köküne, diğerleri uygulama\ içine; .cmd satır sonları CRLF olmalı.
+# paket\ dosyaları uygulama klasörüne; .cmd satır sonları CRLF olmalı.
 foreach ($f in Get-ChildItem (Join-Path $root 'paket') -File) {
-    $yol = if ($f.Name -eq 'KUR.cmd') { Join-Path $kok $f.Name } else { Join-Path $hedef $f.Name }
+    $yol = Join-Path $hedef $f.Name
     if ($f.Extension -eq '.cmd') {
         $metin = [IO.File]::ReadAllText($f.FullName) -replace "`r?`n", "`r`n"
         [IO.File]::WriteAllText($yol, $metin, (New-Object Text.UTF8Encoding $false))
@@ -68,9 +74,9 @@ foreach ($f in Get-ChildItem $kok -Recurse -File) {
         if ($a -and $metin.IndexOf($a, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $bulgu += "$($f.FullName.Substring($kok.Length + 1)): '$a'" }
     }
 }
-if ($bulgu) { $bulgu | ForEach-Object { Write-Warning $_ }; throw 'Pakette kişisel veri bulundu; zip üretilmedi.' }
+if ($bulgu) { $bulgu | ForEach-Object { Write-Warning $_ }; throw 'Pakette kişisel veri bulundu; kurulum programı üretilmedi.' }
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[IO.Compression.ZipFile]::CreateFromDirectory($kok, $zip, [IO.Compression.CompressionLevel]::Optimal, $true)
-$mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-Write-Host "Paket hazır: $zip ($mb MB) - Node $surum"
+& $IsccExe /Q "/DAppVersion=$appSurum" (Join-Path $root 'kurulum\stremio-offline.iss')
+if ($LASTEXITCODE -ne 0) { throw "ISCC hata verdi (çıkış $LASTEXITCODE)" }
+$mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+Write-Host "Kurulum programı hazır: $exe ($mb MB) - sürüm $appSurum, Node $surum"

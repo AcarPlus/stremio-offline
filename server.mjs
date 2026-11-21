@@ -69,7 +69,7 @@ function init () {
   addon = new Addon({ cfg, manager, torrentio, meta })
   kapat = new Kapatma({ cfg, manager })
   kapat.start()
-  guncelleme = new Guncelleme({ cfg, settings })
+  guncelleme = new Guncelleme({ cfg, settings, cikis: () => shutdown(0) })
   guncelleme.start()
   klip = new Klip({ cfg, manager, torrentio }).start()
   kurallar = new Kurallar({ cfg, manager, settings, klip }).start()
@@ -133,6 +133,12 @@ async function handle (req, res) {
       log('kapatma isteği alındı (/api/kapat)')
       setTimeout(() => shutdown(0), 100)
       return
+    }
+    // Uygulama içi güncelleme (kurulum programını indirip başlatır): yalnızca servisin kendi sayfasından
+    if (parts[1] === 'guncelleme' && parts[2] === 'kur' && parts.length === 3) {
+      if (req.method !== 'POST') return json(res, 405, { err: 'POST gerekli' })
+      if (!own) return json(res, 403, { err: 'yasak' })
+      try { return json(res, 200, guncelleme.kur()) } catch (e) { return json(res, e.status || 500, { err: e.message }) }
     }
     if (parts[1] === 'klip' && parts.length <= 4) return klip.handle(req, res, parts) // klip uçları kendi yanıtını yazar (dosya sunumu)
     try {

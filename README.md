@@ -57,17 +57,19 @@ Stremio Offline is a free, open-source companion for **Stremio 5 on Windows**. I
 
 **Requirements:** Windows 10 or 11, and [Stremio 5](https://www.stremio.com/downloads) installed and opened at least once.
 
-1. Download **`StremioOffline.zip`** from the [latest release](https://github.com/AcarPlus/stremio-offline/releases/latest).
-2. Extract it to a permanent folder, such as *Documents*.
-3. Double-click **`KUR.cmd`** (*KUR* means *install*), the only file next to the `uygulama` (*app*) folder.
-   - If Windows SmartScreen says *"Windows protected your PC"*, click **More info → Run anyway**. The package isn't code-signed yet.
-4. Stremio opens with **Download** buttons and a **Downloads** section.
+1. Download **`StremioOffline-Kurulum.exe`** (*Kurulum* means *Setup*) from the [latest release](https://github.com/AcarPlus/stremio-offline/releases/latest).
+2. Run it. It installs into your own user folder, so there's no administrator prompt.
+   - If Windows SmartScreen says *"Windows protected your PC"*, click **More info → Run anyway**. The installer isn't code-signed yet.
+   - If an older zip version is set up, Setup stops it and moves your download list and settings over.
+3. Stremio opens with **Download** buttons and a **Downloads** section.
 
-The package is self-contained. It includes a portable Node.js and rqbit, so there's nothing else to install. Downloads are saved to `Videos\Stremio-Offline`.
+The installer is self-contained. It includes a portable Node.js and rqbit, so there's nothing else to install. Downloads are saved to `Videos\Stremio-Offline`.
+
+When a new version is out, the Downloads page shows **Update now**. It downloads the new Setup from GitHub, checks its SHA-256 digest and installs it silently.
 
 ## Uninstall
 
-Double-click **`uygulama\KALDIR.cmd`** (*KALDIR* means *uninstall*). The service stops and your Stremio shortcuts are restored. You can then delete the folder. Your downloaded videos stay in `Videos\Stremio-Offline` until you delete them yourself.
+Uninstall **Stremio Offline** from *Settings → Apps → Installed apps*. The service stops and your Stremio shortcuts are restored. Your downloaded videos stay in `Videos\Stremio-Offline` until you delete them yourself.
 
 ## Known limitations
 
@@ -81,7 +83,7 @@ Double-click **`uygulama\KALDIR.cmd`** (*KALDIR* means *uninstall*). The service
 ```powershell
 npm test                      # unit and integration tests (node --test)
 node server.mjs               # run the service in the foreground
-./paketle.ps1                 # build dist\StremioOffline.zip
+./paketle.ps1                 # build dist\StremioOffline-Kurulum.exe (needs Inno Setup 6)
 ```
 
 Design notes and the API reference are in [`docs/`](docs/), mostly in Turkish ([`docs/tasarim.md`](docs/tasarim.md) and [`docs/api.md`](docs/api.md)).
@@ -104,18 +106,19 @@ Stremio Offline, **Windows'ta Stremio 5** için ücretsiz ve açık kaynak bir e
 
 ### Kurulum
 
-1. [Son sürüm](https://github.com/AcarPlus/stremio-offline/releases/latest) sayfasından **`StremioOffline.zip`** dosyasını indir.
-2. Zip'i kalıcı bir klasöre aç (örneğin Belgeler). Klasörü sonra taşırsan `KUR.cmd`'yi yeniden çalıştır.
-3. Klasörde `uygulama` klasörünün yanındaki tek dosya olan **`KUR.cmd`**'ye çift tıkla. *"Windows bilgisayarınızı korudu"* uyarısı çıkarsa **Ek bilgi → Yine de çalıştır** de.
-4. Stremio açılır. Film sayfasında **İndir** düğmesi, sol menüde **İndirilenler** görünür.
+1. [Son sürüm](https://github.com/AcarPlus/stremio-offline/releases/latest) sayfasından **`StremioOffline-Kurulum.exe`** dosyasını indir.
+2. Çift tıkla. Kendi kullanıcı klasörüne kurulur, yönetici şifresi istemez. *"Windows bilgisayarınızı korudu"* uyarısı çıkarsa **Ek bilgi → Yine de çalıştır** de. Eski zip sürümü kuruluysa kurulum onu kapatır, indirme listeni ve ayarlarını taşır.
+3. Stremio açılır. Film sayfasında **İndir** düğmesi, sol menüde **İndirilenler** görünür.
 
 Stremio'yu her zamanki gibi kendi simgesinden aç: masaüstü, Başlat menüsü ya da görev çubuğu. Düğmeler oradan açınca da gelir. Stremio kendini güncelleyince arka plandaki servis birkaç saniye içinde ayarı geri getirir.
 
 İndirilen dosyalar `Videolar\Stremio-Offline` klasörüne kaydedilir.
 
+Yeni sürüm çıkınca İndirilenler sayfasında **Şimdi güncelle** düğmesi görünür. Yeni kurulum programı GitHub'dan indirilir, SHA-256 özetiyle doğrulanır ve sessizce kurulur.
+
 ### Kaldırma
 
-**`uygulama\KALDIR.cmd`** dosyasına çift tıkla. Servis kapanır, Stremio kısayolları eski haline döner. İndirdiğin videolar silinmez.
+*Ayarlar → Uygulamalar → Yüklü uygulamalar* listesinden **Stremio Offline**'ı kaldır. Servis kapanır, Stremio kısayolları eski haline döner. İndirdiğin videolar silinmez.
 
 ### Neler yapabilir?
 

@@ -113,6 +113,38 @@ function toast (metin, tur = '') {
   setTimeout(() => el.remove(), tur === 'hata' ? 7000 : 4000)
 }
 
+/**
+ * "Şimdi güncelle" düğmesi: onay → servis kurulum programını indirir, doğrular, başlatır, kapanır →
+ * yeni sürüm açılınca sayfa kendiliğinden yenilenir. durum: ilerleme yazısının yazıldığı öğe.
+ */
+function guncelleDugmesi (g, durum) {
+  const b = h('button', { type: 'button', class: 'dugme kucuk' }, 'Şimdi güncelle')
+  const yaz = t => { durum.textContent = t }
+  b.addEventListener('click', async () => {
+    const r = await onayla({
+      baslik: 'Güncellensin mi?',
+      metin: `Stremio Offline ${g.tag || 'v' + g.latest} kurulacak (şu an v${g.current}). Kurulum programı GitHub'dan indirilip doğrulanır ve kendiliğinden kurulur; servis birkaç saniye kapanır. Süren indirmeler kaldığı yerden sürer, izlediğin bir şey varsa kesilebilir.`,
+      tamam: 'Güncelle'
+    })
+    if (!r.ok) return
+    b.disabled = true
+    try { await post('/api/guncelleme/kur') } catch (e) { toast(e.message, 'hata'); b.disabled = false; return }
+    const bitis = Date.now() + 10 * 60 * 1000
+    const tur = async () => {
+      if (Date.now() > bitis) { yaz('Güncelleme uzun sürdü; sayfayı yenile.'); b.disabled = false; return }
+      let d = null
+      try { d = await api('/api/guncelleme') } catch {}
+      if (d && d.current !== g.current) { yaz('Güncellendi: v' + d.current); setTimeout(() => location.reload(), 800); return }
+      if (d && d.kurulum?.asama === 'hata') { yaz(''); toast('Güncelleme kurulamadı: ' + d.kurulum.hata, 'hata'); b.disabled = false; return }
+      if (d && d.kurulum?.asama === 'indiriliyor') yaz('İndiriliyor… %' + (d.kurulum.yuzde || 0))
+      else yaz('Kuruluyor… sayfa birazdan kendiliğinden yenilenecek')
+      setTimeout(tur, 1000)
+    }
+    tur()
+  })
+  return b
+}
+
 function onayla ({ baslik, metin, tamam = 'Tamam', tik = null }) {
   const d = $('#onay')
   $('#onayBaslik').textContent = baslik
@@ -276,8 +308,9 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   api('/api/guncelleme').then(g => {
     if (!g.available) return
     yeniSurum.hidden = false
+    const durum = h('span', { class: 'soluk' })
     yeniSurum.replaceChildren('Yeni sürüm var: ', h('b', null, g.tag || ('v' + g.latest)), ' — ',
-      g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : 'sürüm sayfası yok')
+      g.kurulabilir ? guncelleDugmesi(g, durum) : (g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : 'sürüm sayfası yok'), ' ', durum)
   }).catch(() => {})
 
   root.append(
@@ -686,7 +719,9 @@ async function viewAyarlar (root, current) {
     surumNo.textContent = 'v' + g.current
     guncelDurum.replaceChildren(g.status === 'guncel' ? 'Güncelsin.' : g.status === 'surum-yok' ? 'Henüz yayınlanmış sürüm yok.'
       : g.status === 'denetlenemedi' ? 'Denetlenemedi (internet yok olabilir).'
-        : g.available ? h('span', null, 'Yeni sürüm: ', h('b', null, g.tag || ('v' + g.latest)), ' ', g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : '') : '')
+        : g.available ? h('span', null, 'Yeni sürüm: ', h('b', null, g.tag || ('v' + g.latest)), ' ',
+          g.kurulabilir ? (() => { const d = h('span', { class: 'soluk' }); return h('span', null, guncelleDugmesi(g, d), ' ', d) })()
+            : g.url ? h('a', { href: g.url, target: '_blank', rel: 'noopener noreferrer' }, 'Sürüm sayfası') : '') : '')
   }
   async function guncelYukle (denetle) {
     guncelDugme.disabled = true

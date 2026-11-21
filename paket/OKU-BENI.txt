@@ -10,17 +10,21 @@ GEREKENLER
 - Windows 10 ya da 11.
 - Stremio (sürüm 5) kurulu olmalı. Yoksa önce stremio.com adresinden indirip kur,
   bir kez açıp giriş yap, sonra kapat.
-- Başka bir şey kurman gerekmez (gerekli her şey bu "uygulama" klasöründe).
+- Başka bir şey kurman gerekmez (gerekli her şey kurulum programının içinde).
 
 
 KURULUM (tek adım)
 ------------------
-1. Zip'i kalıcı bir yere aç (ör. Belgeler). Klasörü sonra taşıma; taşırsan KUR.cmd'yi yeniden çalıştır.
-2. StremioOffline klasöründeki tek dosya olan KUR.cmd'ye çift tıkla.
-   - Güvenlik uyarısı çıkarsa "Çalıştır" de. "Windows bilgisayarınızı korudu" yazıyorsa:
-     "Ek bilgi" -> "Yine de çalıştır".
-   - Güvenlik duvarı sorusu çıkmaz, yönetici şifresi istenmez.
-3. Stremio açılır; sol menüde "İndirilenler" görünür. Bir filmin sayfasında "İndir" düğmesi vardır.
+1. StremioOffline-Kurulum.exe dosyasına çift tıkla.
+   - "Windows bilgisayarınızı korudu" yazıyorsa: "Ek bilgi" -> "Yine de çalıştır".
+   - Güvenlik duvarı sorusu çıkmaz, yönetici şifresi istenmez. Kendi kullanıcı klasörüne kurulur.
+   - Eski zip sürümü kuruluysa kurulum onu kapatır; indirme listen ve ayarların taşınır.
+2. Stremio açılır; sol menüde "İndirilenler" görünür. Bir filmin sayfasında "İndir" düğmesi vardır.
+
+GÜNCELLEME
+----------
+Yeni sürüm çıkınca İndirilenler sayfasının üstünde "Yeni sürüm var" yazar. "Şimdi güncelle"ye basınca
+yeni sürüm GitHub'dan indirilir, doğrulanır ve kendiliğinden kurulur; birkaç saniye sonra sayfa yenilenir.
 
 Stremio'yu her zamanki gibi masaüstündeki ya da Başlat menüsündeki "Stremio" kısayolundan aç;
 kurulum bu kısayolu düğmelerle açacak şekilde ayarlar (masaüstünde yoksa ekler). Ayrı bir kısayol yoktur.
@@ -35,10 +39,9 @@ indirdiklerin yine yerinde durur, Stremio'yu simgesinden yeniden açman yeter.
 
 KALDIRMA
 --------
-Bu "uygulama" klasöründeki KALDIR.cmd dosyasına çift tıkla. Arka plandaki servis kapanır, "Stremio" kısayolu eski haline döner
-(kurulumun eklediği kısayol silinir).
-Sonra StremioOffline klasörünün tamamını silebilirsin. İndirdiğin filmler (Videolar\Stremio-Offline) silinmez;
-istemiyorsan o klasörü elle sil.
+Windows Ayarları -> Uygulamalar -> Yüklü uygulamalar -> "Stremio Offline" -> Kaldır.
+Arka plandaki servis kapanır, "Stremio" kısayolu eski haline döner (kurulumun eklediği kısayol silinir).
+İndirdiğin filmler (Videolar\Stremio-Offline ya da seçtiğin klasör) silinmez; istemiyorsan o klasörü elle sil.
 
 
 SORUN OLURSA
@@ -46,9 +49,10 @@ SORUN OLURSA
 - Düğmeler görünmüyorsa: Stremio'yu tamamen kapat, masaüstü / Başlat menüsündeki "Stremio" kısayolundan
   yeniden aç. Stremio düğmesiz açıksa kısayol "kapatıp yeniden açayım mı?" diye sorar.
   Stremio güncellendikten hemen sonra da böyle olabilir; birkaç dakika sonra yeniden dene
-  ya da StremioOffline klasöründeki KUR.cmd'yi yeniden çalıştır.
+  ya da StremioOffline-Kurulum.exe'yi yeniden çalıştır (verilerin silinmez).
 - İndirme Merkezi'ni tarayıcıda da açabilirsin: http://127.0.0.1:11480
-- Günlük dosyası: bu klasörde data\servis.log (sorun bildirirken ekle).
+- Günlük dosyası: %LOCALAPPDATA%\Programs\StremioOffline\data\servis.log (sorun bildirirken ekle;
+  Ayarlar > Bakım > "Günlük klasörünü aç").
   İndirme motorunun günlükleri: data\rqbit\ altında rqbit.log dosyaları.
 - Antivirüs ya da "Akıllı Uygulama Denetimi" bin\rqbit.exe dosyasını engellerse indirme başlamaz;
   bu durumda bin\rqbit.exe için izin ver ya da sorunu bildir.
