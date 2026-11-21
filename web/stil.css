@@ -273,3 +273,16 @@ html.gomulu .bildirimler { top: 52px; }
   .ayarSatir { flex-direction: column; align-items: stretch; gap: 8px; }
   .ayarKontrol, .satirIci { justify-content: flex-start; }
 }
+/* Klip görsel kipi: galeri (web/klip.js galeriAc) */
+dialog.galeri { background: var(--kart); color: var(--metin); border: 1px solid var(--cizgi); border-radius: 14px; padding: 14px 16px 16px; width: min(1100px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
+dialog.galeri::backdrop { background: rgba(5,4,12,.85); }
+.galeriUst { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.galeriUst h2 { margin: 0; font-size: 16px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.galeriIzgara { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px; }
+.galeriIzgara button { position: relative; padding: 0; border: 1px solid var(--cizgi); border-radius: 8px; overflow: hidden; background: #000; cursor: zoom-in; aspect-ratio: 16 / 9; }
+.galeriIzgara button:hover { border-color: var(--vurgu); }
+.galeriIzgara img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.galeriSaat { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; padding: 1px 6px; border-radius: 6px; }
+.galeriBuyuk { display: flex; flex-direction: column; gap: 8px; }
+.galeriBuyuk img { width: 100%; max-height: calc(100vh - 160px); object-fit: contain; background: #000; border-radius: 8px; cursor: zoom-out; }
+.galeriGezin { display: flex; gap: 8px; align-items: center; justify-content: center; }

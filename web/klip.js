@@ -1,4 +1,5 @@
-// İndirme Merkezi: sürüm seçicide "Klip" (indirmeden önce 60 sn'lik örnek; API: docs/api.md "Klip").
+// İndirme Merkezi: sürüm seçicide "Klip" (indirmeden önce 60 sn'lik örnek ya da görsel kipinde birkaç rastgele sahne
+// görseli; Ayarlar > Klip > Klip türü; API: docs/api.md "Klip"). Görseller burada galeri penceresinde açılır.
 // app.js'ten ÖNCE yüklenir; app.js'in genel yardımcılarını (h, fmtBytes, toast, onayla, oynat, absUrl, EMBED)
 // yalnız çağrı anında kullanır. Satır yeniden çizilse de iş, kaynak anahtarıyla (infoHash:fileIdx) izlenmeye devam eder.
 'use strict'
@@ -22,7 +23,7 @@ async function klipIstek (method, url, body) {
   return j
 }
 
-const klipAnahtar = v => v.infoHash + ':' + (v.fileIdx ?? 'x')
+const klipAnahtar = (v, mode) => v.infoHash + ':' + (v.fileIdx ?? 'x') + ':' + (mode || v.mode || 'video')
 const KLIP_SON = new Set(['ready', 'error', 'canceled'])
 
 /** Saniye -> "s:dd:ss" ya da "d:ss". */
@@ -39,8 +40,10 @@ function klipMetni (j) {
   switch (j.state) {
     case 'connecting': return 'Kaynağa bağlanılıyor…'
     case 'downloading': return `Bağlandı, okunuyor: ${mb}${es}`
-    case 'preparing': return `Klip hazırlanıyor: ${j.doneSec || 0}/${j.lengthSec || 60} sn` + (j.source === 'torrent' ? ` · ${mb} indirildi${es}` : '')
-    case 'ready': return `✔ Klip hazır: ${j.lengthSec || 60} sn, ${fmtBytes(j.sizeBytes)}` + (j.startSec != null && j.durationSec ? ` (${klipSaat(j.startSec)} – ${klipSaat(j.startSec + (j.lengthSec || 60))} arası)` : '')
+    case 'preparing': if (j.mode === 'gorsel') return `Görseller alınıyor: ${j.doneImages || 0}/${j.imageCount || 6}` + (j.source === 'torrent' ? ` · ${mb} indirildi${es}` : '')
+      return `Klip hazırlanıyor: ${j.doneSec || 0}/${j.lengthSec || 60} sn` + (j.source === 'torrent' ? ` · ${mb} indirildi${es}` : '')
+    case 'ready': if (j.mode === 'gorsel') return `✔ ${(j.images || []).length} sahne görseli hazır`
+      return `✔ Klip hazır: ${j.lengthSec || 60} sn, ${fmtBytes(j.sizeBytes)}` + (j.startSec != null && j.durationSec ? ` (${klipSaat(j.startSec)} – ${klipSaat(j.startSec + (j.lengthSec || 60))} arası)` : '')
     case 'error': return '✖ ' + (j.error || 'Klip alınamadı')
     case 'canceled': return 'Klip iptal edildi'
     default: return j.message || ''
@@ -52,12 +55,19 @@ function klipMetni (j) {
  * Dönüş: [düğme, durum] (ikisi de satırın işlem hücresine eklenir).
  */
 function klipDugmesi (v, ctx) {
-  const key = klipAnahtar(v)
+  let mode = 'video'
+  let key = klipAnahtar(v, mode)
   const durum = h('div', { class: 'klipDurum', hidden: true })
   const b = h('button', { class: 'dugme gri kucuk', type: 'button', title: 'İndirmeden önce 60 sn’lik örnek al: kalite birebir (yeniden sıkıştırma yok), kütüphaneye eklenmez' }, '🎬 Klip')
   let timer = null
   klipYetenek().then(c => {
     if (!c.available) { b.disabled = true; b.title = 'Klip kullanılamıyor: ' + (c.reason || 'ffmpeg bulunamadı'); return }
+    if (c.mode === 'gorsel') {
+      mode = 'gorsel'
+      key = klipAnahtar(v, mode)
+      b.textContent = '🖼 Görseller'
+      b.title = 'İndirmeden önce filmin rastgele yerlerinden ' + (c.imageCount || 6) + ' sahne görseli al (kalite örneği; kütüphaneye eklenmez)'
+    }
     if (c.job && klipAnahtar(c.job) === key) KLIP_ISLER.set(key, c.job)
     const hazir = (c.klips || []).find(x => klipAnahtar(x) === key)
     if (hazir && !KLIP_ISLER.has(key)) KLIP_ISLER.set(key, hazir)
@@ -71,7 +81,7 @@ function klipDugmesi (v, ctx) {
     try {
       const r = await klipIstek('POST', '/api/klip', {
         infoHash: v.infoHash, fileIdx: v.fileIdx ?? null, trackers: v.trackers || [], type: ctx.type, id: ctx.id,
-        title: v.name || v.title || '', fileName: v.fileName || '', replace
+        title: v.name || v.title || '', fileName: v.fileName || '', replace, mode
       })
       KLIP_ISLER.set(key, r.job)
       goster(r.job)
@@ -112,6 +122,9 @@ function klipDugmesi (v, ctx) {
     const kids = [h('span', null, klipMetni(j)), ' ']
     if (calisiyor) {
       kids.push(h('button', { class: 'dugme gri kucuk', type: 'button', onclick: async () => { try { await klipIstek('DELETE', '/api/klip/' + j.id) } catch (e) { toast(e.message, 'hata') } } }, 'İptal'))
+    } else if (j.state === 'ready' && j.mode === 'gorsel') {
+      kids.push(h('button', { class: 'dugme oynat kucuk', type: 'button', onclick: () => galeriAc(j, v.name || v.title || j.title || '') }, '🖼 Görselleri aç'))
+      kids.push(' ', h('button', { class: 'dugme gri kucuk', type: 'button', title: 'Görselleri sil (24 saat sonra kendiliğinden silinir)', onclick: async () => { try { await klipIstek('DELETE', '/api/klip/' + j.id); KLIP_ISLER.delete(key); goster(null) } catch (e) { toast(e.message, 'hata') } } }, 'Sil'))
     } else if (j.state === 'ready') {
       const desc = { id: j.id, infoHash: j.infoHash, type: null, imdbId: null, videoId: null, season: null, episode: null, fileIdx: null, fileName: 'klip.mkv', title: 'Klip: ' + (j.title || v.name || ''), name: v.name, state: 'ready', poster: '', playUrl: absUrl(j.fileUrl) }
       if (EMBED) kids.push(h('button', { class: 'dugme oynat kucuk', type: 'button', onclick: () => oynat(desc) }, '▶ Klibi oynat'))
@@ -128,4 +141,47 @@ function klipDugmesi (v, ctx) {
   }
 
   return [b, durum]
+}
+
+/**
+ * Görsel kipinin sonucu: kendi penceresinde ızgara; tıklayınca büyük görünüm (← → ile gezin, Esc ile kapat).
+ * j: hazır klip görünümü (images: [{ url, atSec }]).
+ */
+function galeriAc (j, baslik) {
+  let d = document.getElementById('galeri')
+  if (!d) {
+    d = h('dialog', { id: 'galeri', class: 'galeri', 'aria-label': 'Sahne görselleri' })
+    document.body.append(d)
+    d.addEventListener('click', e => { if (e.target === d) d.close() }) // arka plana tıklayınca kapanır
+    // Ok tuşları: yeniden çizimde odak pencereden çıkabildiği için sayfa düzeyinde dinlenir
+    document.addEventListener('keydown', e => { if (d.open && d._tus) d._tus(e) })
+  }
+  const imgs = j.images || []
+  let secili = -1
+  const kapat = h('button', { class: 'dugme gri kucuk', type: 'button', onclick: () => d.close() }, 'Kapat')
+  const saat = g => (g.atSec != null ? klipSaat(g.atSec) : '')
+  function ciz () {
+    const ust = h('div', { class: 'galeriUst' }, h('h2', { title: baslik }, '🖼 ' + (baslik || 'Sahne görselleri')), kapat)
+    if (secili < 0) {
+      const izgara = h('div', { class: 'galeriIzgara' }, imgs.map((g, k) =>
+        h('button', { type: 'button', title: 'Büyüt (' + saat(g) + ')', onclick: () => { secili = k; ciz() } },
+          h('img', { src: absUrl(g.url), alt: 'Sahne ' + (k + 1) + ', ' + saat(g), loading: 'lazy' }),
+          h('span', { class: 'galeriSaat' }, saat(g)))))
+      d.replaceChildren(ust, h('p', { class: 'soluk', style: 'margin:0 0 8px;font-size:13px' }, imgs.length + ' rastgele sahne · görüntüye tıklayınca büyür. Görseller filmden birebir alınır (HDR ise renkler SDR’ye çevrilir).'), izgara)
+    } else {
+      const g = imgs[secili]
+      const onceki = h('button', { class: 'dugme gri kucuk', type: 'button', disabled: secili === 0, onclick: () => { secili--; ciz() } }, '← Önceki')
+      const sonraki = h('button', { class: 'dugme gri kucuk', type: 'button', disabled: secili === imgs.length - 1, onclick: () => { secili++; ciz() } }, 'Sonraki →')
+      const izgaraya = h('button', { class: 'dugme gri kucuk', type: 'button', onclick: () => { secili = -1; ciz() } }, 'Hepsi')
+      d.replaceChildren(ust, h('div', { class: 'galeriBuyuk' },
+        h('img', { src: absUrl(g.url), alt: 'Sahne ' + (secili + 1) + ', ' + saat(g), title: 'Küçült', onclick: () => { secili = -1; ciz() } }),
+        h('div', { class: 'galeriGezin' }, onceki, h('span', { class: 'soluk' }, (secili + 1) + ' / ' + imgs.length + ' · ' + saat(g)), sonraki, izgaraya)))
+    }
+  }
+  d._tus = e => {
+    if (secili < 0) return
+    if (e.key === 'ArrowLeft' && secili > 0) { secili--; ciz() } else if (e.key === 'ArrowRight' && secili < imgs.length - 1) { secili++; ciz() }
+  }
+  ciz()
+  if (!d.open) d.showModal()
 }

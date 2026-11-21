@@ -9,7 +9,7 @@ import path from 'node:path'
 import vm from 'node:vm'
 import { fileURLToPath } from 'node:url'
 import { createTorrent, parseTorrent } from '../lib/bencode.mjs'
-import { findFfmpeg, pickStreams, clipWindow, cutArgs, NO_PEERS } from '../lib/klip.mjs'
+import { findFfmpeg, pickStreams, clipWindow, cutArgs, NO_PEERS, gorselAnlari, hdrMi, kareArgs } from '../lib/klip.mjs'
 import { startSeeder, startService, serviceConfig, cleanService, waitFor, rq, killAll, readRange, sleep, TEST_DIR } from './harness.mjs'
 
 const ff = await findFfmpeg()
@@ -246,5 +246,74 @@ describe('klip: süresi dolan klip açılışta silinir; ffmpeg yoksa kullanıla
     const e = await svc.api('POST', '/api/klip', { infoHash: vid.infoHash, fileIdx: 0 }).catch(x => x)
     assert.equal(e.status, 503)
     await svc.stop()
+  })
+})
+
+// ---------------------------------------------------------------- görsel kipi (rastgele sahne görselleri)
+
+test('klip görsel: anlar filme yayılır (%5–%95, her dilimden bir), HDR ton eşleme yalnız PQ/HLG', () => {
+  const a = gorselAnlari(1000, 6, () => 0.5)
+  assert.equal(a.length, 6)
+  for (let k = 0; k < 6; k++) { const dilim = 900 / 6; assert.ok(a[k] >= 50 + dilim * k && a[k] <= 50 + dilim * (k + 1), 'an ' + a[k]) }
+  const r = gorselAnlari(7200, 9)
+  assert.ok(r.every((x, i) => x >= 360 && x <= 6840 && (i === 0 || x > r[i - 1])), 'sıralı ve aralıkta')
+  assert.deepEqual(gorselAnlari(null, 6), [])
+  assert.deepEqual(gorselAnlari(100, 0), [])
+  assert.equal(hdrMi({ color_transfer: 'smpte2084' }), true)
+  assert.equal(hdrMi({ color_transfer: 'arib-std-b67' }), true)
+  assert.equal(hdrMi({ color_transfer: 'bt709' }), false)
+  assert.equal(hdrMi({}), false)
+  const sdr = kareArgs({ input: 'x.mkv', out: 'g1.jpg', at: 12.5, video: { index: 0 } })
+  assert.deepEqual(sdr.slice(sdr.indexOf('-ss'), sdr.indexOf('-ss') + 4), ['-ss', '12.5', '-i', 'x.mkv'], 'girdi öncesi -ss')
+  assert.ok(sdr.includes('-frames:v') && !sdr.join(' ').includes('tonemap'))
+  const hdr = kareArgs({ input: 'http://a/b', out: 'g1.jpg', at: 1, video: { index: 1, color_transfer: 'smpte2084' }, http: true })
+  assert.ok(hdr.join(' ').includes('tonemap=tonemap=hable') && hdr.includes('-rw_timeout'))
+  assert.deepEqual(hdr.slice(hdr.indexOf('-map'), hdr.indexOf('-map') + 2), ['-map', '0:1'])
+})
+
+describe('klip görsel kipi: akıştan rastgele sahne görselleri', { skip: NOFF }, () => {
+  const sc = serviceConfig(47, { OFFLINE_FFMPEG: ff.ffmpeg, OFFLINE_METADATA_TIMEOUT: '8' })
+  let svc
+  before(async () => { cleanService(sc); svc = await startService(sc) })
+  after(async () => { await svc?.stop() })
+
+  test('ayar görsel kipindeyken: 6 JPEG, galeri adresleri, kütüphaneye eklenmez; video klibiyle karışmaz', async () => {
+    let c = await svc.api('GET', '/api/klip')
+    assert.equal(c.mode, 'video')
+    await svc.api('POST', '/api/settings', { clipMode: 'gorsel', clipImages: 6 })
+    await assert.rejects(svc.api('POST', '/api/settings', { clipMode: 'resim' }), e => e.status === 400)
+    c = await svc.api('GET', '/api/klip')
+    assert.equal(c.mode, 'gorsel'); assert.equal(c.imageCount, 6)
+    const r = await svc.api('POST', '/api/klip', { infoHash: vid.infoHash, fileIdx: 1, type: 'movie', id: 'tt0000047', title: 'Görsel Sınama' })
+    assert.equal(r.job.mode, 'gorsel')
+    const j = await waitJob(svc, r.job.id)
+    assert.equal(j.state, 'ready', j.error)
+    assert.equal(j.images.length, 6)
+    assert.equal(j.doneImages, 6)
+    assert.ok(j.images.every((g, i) => g.atSec >= 9 && g.atSec <= 171 && (i === 0 || g.atSec > j.images[i - 1].atSec)), 'anlar: ' + j.images.map(g => g.atSec))
+    const dir = path.join(sc.dataDir, 'klipler', j.id)
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['g1.jpg', 'g2.jpg', 'g3.jpg', 'g4.jpg', 'g5.jpg', 'g6.jpg'])
+    const g = await fetch(j.images[0].url)
+    assert.equal(g.status, 200)
+    assert.equal(g.headers.get('content-type'), 'image/jpeg')
+    const b = Buffer.from(await g.arrayBuffer())
+    assert.equal(b.readUInt16BE(0), 0xffd8, 'JPEG başlığı')
+    assert.equal((await fetch(svc.base + '/api/klip/' + j.id + '/gorsel/7')).status, 404)
+    assert.equal((await fetch(svc.base + '/api/klip/' + j.id + '/dosya')).status, 409, 'görsel kipinde video dosyası yok')
+    assert.equal((await svc.api('GET', '/api/items')).items.length, 0)
+    // Hazır liste ve yeniden istek
+    assert.ok((await svc.api('GET', '/api/klip')).klips.some(k => k.id === j.id && k.mode === 'gorsel' && k.images.length === 6))
+    assert.equal((await svc.api('POST', '/api/klip', { infoHash: vid.infoHash, fileIdx: 1 })).job.id, j.id)
+    // Aynı kaynağın video klibi ayrı iş (açık kip isteği ayarı geçer)
+    const v = await svc.api('POST', '/api/klip', { infoHash: vid.infoHash, fileIdx: 1, mode: 'video' })
+    assert.equal(v.existed, false)
+    assert.notEqual(v.job.id, j.id)
+    const vj = await waitJob(svc, v.job.id)
+    assert.equal(vj.state, 'ready', vj.error)
+    assert.equal(vj.mode, 'video')
+    // Sil: klasör de gider
+    await svc.api('DELETE', '/api/klip/' + j.id)
+    assert.ok(!fs.existsSync(dir))
+    await assert.rejects(svc.api('GET', '/api/klip/' + j.id), e => e.status === 404)
   })
 })

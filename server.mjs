@@ -140,7 +140,7 @@ async function handle (req, res) {
       if (!own) return json(res, 403, { err: 'yasak' })
       try { return json(res, 200, guncelleme.kur()) } catch (e) { return json(res, e.status || 500, { err: e.message }) }
     }
-    if (parts[1] === 'klip' && parts.length <= 4) return klip.handle(req, res, parts) // klip uçları kendi yanıtını yazar (dosya sunumu)
+    if (parts[1] === 'klip' && parts.length <= 5) return klip.handle(req, res, parts) // klip uçları kendi yanıtını yazar (dosya sunumu)
     try {
       const [code, body] = await api.handle(req, parts, url)
       return json(res, code, body)

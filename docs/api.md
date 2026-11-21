@@ -125,6 +125,7 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
 | `autoQuality`, `autoMaxSizeGB` | `2160p/1080p/720p/480p`, 1–1000 | config.json | Kart menüsündeki "Cihaza indir" otomatik seçimi |
 | `preferTurkish` | bool | false | Sürüm listesinde ve otomatik seçimde Türkçe (🇹🇷, TR, Dublaj…) önce (`torrentio.mjs` `isTurkish`) |
 | `clipSeconds`, `clipStartPct` | 30/60/90, 0–90 | 60, 30 | Klip uzunluğu ve başlangıç noktası (sürenin yüzdesi) |
+| `clipMode`, `clipImages` | `video`/`gorsel`, 4/6/9 | `video`, 6 | Klip türü: 60 sn kesit ya da rastgele sahne görselleri; görsel sayısı (1.3.1) |
 | `showBadges` | bool | true | Stremio posterlerinde rozet (`/api/items` `summary.settings.showBadges`) |
 | `deleteWatchedDays` | tam sayı 0–3650 | 0 | Bitmiş indirme son oynatmasından bu kadar gün sonra dosyasıyla silinir (0 = kapalı); hiç oynatılmamışa dokunulmaz |
 | `seedMode` | `kapali` / `acik` / `sinirli` | `kapali` (config `seedAfterDownload: true` ise `acik`) | Bitince paylaşım (seed). `kapali`: süreç kapanır, yükleme yok. `acik`: süreç açık kalır, yükleme `uploadLimit` ile. `sinirli`: yükleme `seedLimit` ile. `kapali`ya alınınca paylaşılanlar hemen durur. Servis yeniden açılınca paylaşım sürmez (yeniden doğrulama yükü olmasın). Öğe görünümünde `seeding`, `uploadSpeed`, `peers`, `seedUploadedBytes` |
@@ -220,6 +221,8 @@ Uçlar (`:id` 16 onaltılık karakter):
 - `GET /api/klip/:id` → iş: `{ id, state, message, error, infoHash, fileIdx, type, videoId, title, fileName, source, downloadedBytes, peers, durationSec, startSec, lengthSec, doneSec, sizeBytes, startedAt, createdAt, expiresAt, fileUrl }`. `state`: `connecting` (bağlanıyor) → `downloading` (akış açıldı, `downloadedBytes`) → `preparing` (ffmpeg yazıyor, `doneSec/lengthSec`) → `ready` | `error` | `canceled`. Son 20 iş bellekte tutulur.
 - `DELETE /api/klip/:id` → `{ ok: true }`: süren işi iptal eder, hazır klibi siler.
 - `GET|HEAD /api/klip/:id/dosya` → klip (`video/x-matroska`, Range, `206`/`416`). Hazır değilse `409`.
+
+**Görsel kipi (1.3.1):** `POST /api/klip` gövdesinde `mode: "gorsel" | "video"` (yoksa ayar `clipMode`). Aynı akıştan süre okunur, sürenin %5–%95'i `clipImages` eşit dilime bölünür ve her dilimden rastgele bir an seçilir (`gorselAnlari`); her an için girdi öncesi `-ss` ile tek kare JPEG (`-q:v 2`, kare oranı düzeltilir; video `color_transfer` PQ/HLG ise zscale+tonemap hable ile SDR). Çıktı `data/klipler/<id>/g1.jpg…` + `<id>.json` (`mode: "gorsel"`, `images: [{ atSec, sizeBytes }]`); anahtar `<infoHash>:<fileIdx>:g` (aynı kaynağın video klibiyle karışmaz). Görünümde `mode`, `imageCount`, `doneImages`, hazırken `images: [{ url: <servis>/api/klip/<id>/gorsel/<n>, atSec }]`. `GET /api/klip/<id>/gorsel/<n>` → `image/jpeg` (yoksa 404). `GET /api/klip` ayrıca `mode`, `imageCount` (ayardaki) döndürür. Ömür, temizlik, silme video kipiyle aynı.
 
 Arayüz: sürüm seçicide inmemiş her satırda "🎬 Klip" (`web/klip.js`); ilerleme satırın altında, hazır olunca "▶ Klibi oynat". Gömülü kipte `oynat` iletisi `playUrl: <servis>/api/klip/<id>/dosya` ile gider (`inject.js` yalnız bu biçimi ve `/play/` adreslerini kabul eder) ve Stremio oynatıcısında **kütüphane kimliği olmadan** (`#/player/<akış>`) açılır: izleme geçmişine film olarak yazılmaz. Tarayıcıda (gömülü değil) `<video>` ile oynatılır, yanında dosya bağlantısı.
 

@@ -114,6 +114,51 @@ function toast (metin, tur = '') {
 }
 
 /**
+ * "Hepsi bitince bilgisayarı kapat": bellekte (kalıcı değil), tetiklenince kendini kapatır; Windows 60 sn geri sayım yapar.
+ * ozet: İndirmeler sayfası kipi (anahtar yok; yalnız açıkken durum + İptal görünür). Ayarlar'da tam satır.
+ * Dönüş: { el, set(durum) } — durum GET /api/kapat-zamanla.
+ */
+function kapatKontrolu ({ ozet = false } = {}) {
+  const id = ozet ? 'kapatTikOzet' : 'kapatTik'
+  const kapatTik = h('input', { type: 'checkbox', id, class: ozet ? '' : 'anahtar', 'aria-label': 'Hepsi bitince bilgisayarı kapat' })
+  const kapatMetin = h('span', { class: 'soluk' })
+  const kapatIptal = h('button', { type: 'button', class: 'dugme kucuk tehlike', hidden: true }, 'İptal')
+  const el = ozet
+    ? h('div', { class: 'araclar kapatSatiri', role: 'group', 'aria-label': 'Bilgisayarı kapatma', hidden: true }, kapatMetin, kapatIptal)
+    : h('div', { class: 'satirIci kapatSatiri', role: 'group', 'aria-label': 'Bilgisayarı kapatma' }, kapatTik, kapatMetin, kapatIptal)
+  let kapatKilit = false
+  function set (k) {
+    if (kapatKilit) return
+    kapatTik.checked = !!(k.armed || k.countdown)
+    kapatTik.disabled = !!k.countdown
+    kapatIptal.hidden = !(k.countdown || k.armed)
+    el.classList.toggle('uyarili', !!k.countdown)
+    if (ozet) el.hidden = !(k.armed || k.countdown)
+    if (k.countdown) kapatMetin.textContent = 'Bilgisayar ' + k.secondsLeft + ' sn içinde kapanacak' + (k.simulated ? ' (sınama: gerçekten kapanmaz)' : '') + '.'
+    else if (k.armed) kapatMetin.textContent = 'Etkin indirmeler (' + k.active + ') bitince bilgisayar kapanacak (60 sn geri sayımla; iptal edebilirsin).'
+    else kapatMetin.textContent = ozet ? '' : (k.message || '')
+  }
+  async function kapatGonder (enabled) {
+    kapatKilit = true
+    try { set(await post('/api/kapat-zamanla', { enabled })); if (!enabled) toast('Kapatma iptal edildi.', 'ok') } catch (e) { toast(e.message, 'hata') } finally { kapatKilit = false }
+    try { set(await api('/api/kapat-zamanla')) } catch {}
+  }
+  kapatTik.addEventListener('change', async () => {
+    // İstenen değer tıklama anında alınır: onay penceresi açıkken 1 sn'lik yoklama kutuyu geri çevirmesin (kilit)
+    const enabled = kapatTik.checked
+    if (enabled) {
+      kapatKilit = true
+      let r
+      try { r = await onayla({ baslik: 'İndirmeler bitince bilgisayar kapansın mı?', metin: 'Etkin bütün indirmeler tamamlanınca Windows 60 saniyelik geri sayımla bilgisayarı kapatır; bu süre içinde İptal edebilirsin. Kaydedilmemiş işlerin varsa kaydet. Bu ayar kalıcı değildir (servis yeniden başlayınca kapanır).', tamam: 'Aç' }) } finally { kapatKilit = false }
+      if (!r.ok) { kapatTik.checked = false; return }
+    }
+    await kapatGonder(enabled)
+  })
+  kapatIptal.addEventListener('click', () => kapatGonder(false))
+  return { el, set }
+}
+
+/**
  * "Şimdi güncelle" düğmesi: onay → servis kurulum programını indirir, doğrular, başlatır, kapanır →
  * yeni sürüm açılınca sayfa kendiliğinden yenilenir. durum: ilerleme yazısının yazıldığı öğe.
  */
@@ -268,40 +313,8 @@ function viewHome (root, current, baslik = 'İndirmeler') {
   const cards = new Map()
   let items = []
 
-  // Hepsi bitince bilgisayarı kapat: bellekte (kalıcı değil), tetiklenince kendini kapatır; Windows 60 sn geri sayım yapar
-  const kapatTik = h('input', { type: 'checkbox', id: 'kapatTik' })
-  const kapatMetin = h('span', { class: 'soluk' })
-  const kapatIptal = h('button', { type: 'button', class: 'dugme kucuk tehlike', hidden: true }, 'İptal')
-  const kapatKutu = h('div', { class: 'araclar kapatSatiri', role: 'group', 'aria-label': 'Bilgisayarı kapatma' },
-    h('label', { for: 'kapatTik', class: 'sinirEtiket' }, kapatTik, 'Hepsi bitince bilgisayarı kapat'), kapatMetin, kapatIptal)
-  let kapatKilit = false
-  function setKapat (k) {
-    if (kapatKilit) return
-    kapatTik.checked = !!(k.armed || k.countdown)
-    kapatTik.disabled = !!k.countdown
-    kapatIptal.hidden = !(k.countdown || k.armed)
-    kapatKutu.classList.toggle('uyarili', !!k.countdown)
-    if (k.countdown) kapatMetin.textContent = 'Bilgisayar ' + k.secondsLeft + ' sn içinde kapanacak' + (k.simulated ? ' (sınama: gerçekten kapanmaz)' : '') + '.'
-    else if (k.armed) kapatMetin.textContent = 'Etkin indirmeler (' + k.active + ') bitince bilgisayar kapanacak (60 sn geri sayımla; iptal edebilirsin).'
-    else kapatMetin.textContent = k.message || ''
-  }
-  async function kapatGonder (enabled) {
-    kapatKilit = true
-    try { setKapat(await post('/api/kapat-zamanla', { enabled })); if (!enabled) toast('Kapatma iptal edildi.', 'ok') } catch (e) { toast(e.message, 'hata') } finally { kapatKilit = false }
-    try { setKapat(await api('/api/kapat-zamanla')) } catch {}
-  }
-  kapatTik.addEventListener('change', async () => {
-    // İstenen değer tıklama anında alınır: onay penceresi açıkken 1 sn'lik yoklama kutuyu geri çevirmesin (kilit)
-    const enabled = kapatTik.checked
-    if (enabled) {
-      kapatKilit = true
-      let r
-      try { r = await onayla({ baslik: 'İndirmeler bitince bilgisayar kapansın mı?', metin: 'Etkin bütün indirmeler tamamlanınca Windows 60 saniyelik geri sayımla bilgisayarı kapatır; bu süre içinde İptal edebilirsin. Kaydedilmemiş işlerin varsa kaydet. Bu ayar kalıcı değildir (servis yeniden başlayınca kapanır).', tamam: 'Aç' }) } finally { kapatKilit = false }
-      if (!r.ok) { kapatTik.checked = false; return }
-    }
-    await kapatGonder(enabled)
-  })
-  kapatIptal.addEventListener('click', () => kapatGonder(false))
+  // "Hepsi bitince kapat" Ayarlar'da açılır; burada yalnız açıkken durum ve İptal görünür
+  const { el: kapatKutu, set: setKapat } = kapatKontrolu({ ozet: true })
 
   // Yeni sürüm şeridi (ayrıntı ve denetim Ayarlar'da)
   const yeniSurum = h('div', { class: 'uyari yeniSurum', role: 'status', hidden: true })
@@ -536,13 +549,19 @@ route(/^\/$/, (r, c) => viewHome(r, c), 'indirmeler')
 route(/^\/indirilenler$/, (r, c) => viewHome(r, c, 'İndirilenler'), 'indirmeler')
 
 // ───────────────────────── Ayarlar ─────────────────────────
-// Bütün ayarlar burada; İndirmeler sayfasında yalnız özet, liste ve "bitince kapat" kalır.
+// Bütün ayarlar burada ("hepsi bitince kapat" dahil); İndirmeler sayfasında yalnız özet, liste ve kapatma açıkken durum/İptal.
 async function viewAyarlar (root, current) {
   root.append(h('h1', null, 'Ayarlar'), yukleniyor('Ayarlar okunuyor…'))
   let s
   try { s = await api('/api/settings') } catch (e) { root.replaceChildren(h('h1', null, 'Ayarlar'), hataKutusu(e.message, () => render())); return }
   if (!current()) return
   root.replaceChildren(h('h1', null, 'Ayarlar'))
+
+  // "Hepsi bitince kapat": sayfa açıkken saniyede bir durum (geri sayım burada da görünür)
+  const kapat = kapatKontrolu()
+  const kapatYokla = () => { if (!current()) { clearInterval(kapatIv); return } api('/api/kapat-zamanla').then(kapat.set).catch(() => {}) }
+  const kapatIv = setInterval(kapatYokla, 1000)
+  kapatYokla()
 
   /** Ayarı kaydeder; başarısızsa geri alma işlevini çağırır. */
   async function kaydet (patch, okMetin, geriAl) {
@@ -634,6 +653,7 @@ async function viewAyarlar (root, current) {
     satir('Diskte en az boş alan', secim('minFreeGB', [[0, 'Kapalı'], [10, '10 GB'], [25, '25 GB'], [50, '50 GB'], [100, '100 GB']], v => v ? `Diskte ${v} GB'den az yer kalınca indirmeler durur.` : 'Disk alanı sınırı kapalı.'),
       'Bu kadar yer kalınca indirmeler durur; yer açılınca kendiliğinden sürer.'),
     satir('İndirme bitince bildirim', anahtar('notifyOnComplete', 'İndirme bitince Windows bildirimi gösterilecek.', 'Bildirim kapalı.'), 'Windows\'un sağ alt köşesinde kısa bir bildirim.'),
+    satir('Hepsi bitince bilgisayarı kapat', kapat.el, 'Etkin indirmeler bitince Windows 60 sn geri sayımla kapanır (İptal edilebilir). Kalıcı değildir: servis yeniden başlayınca kapanır.'),
     satir('Otomatik sürüm seçimi', h('div', { class: 'satirIci' },
       secim('autoQuality', [['2160p', '2160p (4K)'], ['1080p', '1080p'], ['720p', '720p'], ['480p', '480p']], v => 'Otomatik seçimde kalite: ' + v),
       h('span', { class: 'soluk' }, 'en çok'), enBuyuk, h('span', { class: 'soluk' }, 'GB')),
@@ -672,6 +692,9 @@ async function viewAyarlar (root, current) {
       satir('Türkçe sürümleri öne al', anahtar('preferTurkish', 'Türkçe dublaj/altyazılı sürümler listede önce gelecek.', 'Sürümler yalnız kaynak sayısına göre sıralanacak.'),
         'Sürüm listesinde ve otomatik seçimde Türkçe ses ya da altyazı içerenler (🇹🇷, TR, Dublaj) önce gelir.')),
     grup('Klip',
+      satir('Klip türü', secim('clipMode', [['video', 'Video klip'], ['gorsel', 'Rastgele sahne görselleri']], v => { klipYetenekP = null; return v === 'gorsel' ? 'Klip düğmesi artık rastgele sahne görselleri alacak.' : 'Klip düğmesi 60 sn’lik video kesit alacak.' }),
+        'Video klip Stremio oynatıcısında açılır. Görseller filmin rastgele yerlerinden alınır ve burada galeri olarak açılır (daha hızlı, az veri).'),
+      satir('Görsel sayısı', secim('clipImages', [[4, '4 görsel'], [6, '6 görsel'], [9, '9 görsel']], v => { klipYetenekP = null; return 'Görsel kipinde ' + v + ' sahne alınacak.' }), 'Yalnız "Rastgele sahne görselleri" türünde.'),
       satir('Klip uzunluğu', secim('clipSeconds', [[30, '30 sn'], [60, '60 sn'], [90, '90 sn']], v => 'Klip uzunluğu: ' + v + ' sn'), 'İndirmeden önce kaliteye bakmak için alınan örnek.'),
       satir('Klip başlangıcı', secim('clipStartPct', [[10, 'Filmin %10 noktası'], [20, 'Filmin %20 noktası'], [30, 'Filmin %30 noktası'], [40, 'Filmin %40 noktası'], [50, 'Filmin ortası']], v => 'Klip filmin %' + v + ' noktasından alınacak.'),
         'Baştaki jenerik yerine sahnenin olduğu bir yerden.')),
