@@ -422,9 +422,10 @@ function viewHome (root, current, baslik = 'İndirmeler') {
       upd('pct', done ? 100 : pct, v => { bar.style.width = v + '%'; cubuk.setAttribute('aria-valuenow', String(Math.floor(v))) })
       const active = it.state === 'downloading'
       upd('yuzde', done ? '✔ Hazır' : (it.state === 'resolving' ? 'Torrent bilgisi alınıyor…' : (it.state === 'error' && !pct ? '' : '%' + pct.toFixed(1))), t => { sYuzde.textContent = t; sYuzde.hidden = !t })
-      upd('hiz', active ? '↓ ' + fmtSpeed(it.downloadSpeed) : '', t => { sHiz.textContent = t; sHiz.hidden = !t })
+      const paylas = done && it.seeding
+      upd('hiz', active ? '↓ ' + fmtSpeed(it.downloadSpeed) : (paylas ? '↑ Paylaşılıyor ' + fmtSpeed(it.uploadSpeed) + (it.seedUploadedBytes ? ' · ' + fmtBytes(it.seedUploadedBytes) + ' gönderildi' : '') : ''), t => { sHiz.textContent = t; sHiz.hidden = !t })
       upd('kalan', active ? 'Kalan: ' + fmtEta(it.eta) : '', t => { sKalan.textContent = t; sKalan.hidden = !t })
-      upd('kaynak', active ? it.peers + ' kaynak' : '', t => { sKaynak.textContent = t; sKaynak.hidden = !t })
+      upd('kaynak', active || paylas ? it.peers + (paylas ? ' eş' : ' kaynak') : '', t => { sKaynak.textContent = t; sKaynak.hidden = !t })
       upd('boyut', done ? fmtBytes(it.sizeBytes) : (it.sizeBytes ? fmtBytes(it.doneBytes) + ' / ' + fmtBytes(it.sizeBytes) : ''), t => { sBoyut.textContent = t; sBoyut.hidden = !t })
       const q = (it.source && it.source.quality) || ''
       upd('kalite', q, t => { sKalite.textContent = t; sKalite.hidden = !t })
@@ -610,6 +611,14 @@ async function viewAyarlar (root, current) {
   const yukleme = limitPicker({ presets: UL_PRESETS, unit: 'KB', label: 'Yükleme sınırı', onSet: v => post('/api/settings', { uploadLimit: v }), okText: v => 'Yükleme sınırı: ' + fmtLimit(v) })
   const kisma = limitPicker({ presets: TH_PRESETS, unit: 'KB', label: 'Öncelikli indirme varken diğerlerinin hızı', onSet: v => post('/api/settings', { priorityThrottle: v }), okText: v => v > 0 ? 'Öncelik varken diğer indirmeler: ' + fmtLimit(v) : 'Öncelik diğer indirmeleri kısmaz' })
   varsayilan.set(s.defaultDownloadLimit); yukleme.set(s.uploadLimit); kisma.set(s.priorityThrottle)
+  // Paylaşım (seed): kapalı / açık (genel yükleme sınırıyla) / sınırlı (kendi hızıyla)
+  const seedSinir = limitPicker({ presets: UL_PRESETS.filter(([n]) => n > 0), unit: 'KB', label: 'Paylaşım hızı', onSet: v => post('/api/settings', { seedLimit: v }).then(r => { s = r }), okText: v => 'Paylaşım hızı: ' + fmtLimit(v) })
+  seedSinir.set(s.seedLimit)
+  const seedSecim = secim('seedMode', [['kapali', 'Kapalı'], ['acik', 'Açık'], ['sinirli', 'Sınırlı']],
+    v => v === 'kapali' ? 'Paylaşım kapalı; paylaşılanlar durduruldu.' : v === 'acik' ? 'İndirme bitince paylaşım sürecek (yükleme sınırıyla).' : 'İndirme bitince paylaşım sürecek, en çok ' + fmtLimit(s.seedLimit) + '.')
+  const seedSinirKutu = h('div', { class: 'satirIci' }, h('span', { class: 'soluk' }, 'en çok'), seedSinir.el)
+  seedSinirKutu.hidden = s.seedMode !== 'sinirli'
+  seedSecim.addEventListener('change', () => { seedSinirKutu.hidden = seedSecim.value !== 'sinirli' })
   const hepsine = h('button', { type: 'button', class: 'dugme kucuk gri', title: 'Varsayılan sınırı bütün indirmelere uygula' }, 'Hepsine uygula')
   hepsine.addEventListener('click', async () => {
     const r = await onayla({ baslik: 'Hepsine uygulansın mı?', metin: `Her indirmenin hız sınırı ${fmtLimit(varsayilan.value)} olur. Tek tek seçtiğin sınırlar değişir.`, tamam: 'Uygula' })
@@ -620,7 +629,9 @@ async function viewAyarlar (root, current) {
   root.append(grup('Hız',
     satir('Yeni indirmeler için hız sınırı', h('div', { class: 'satirIci' }, varsayilan.el, hepsine), 'Her indirmenin kendi sınırı İndirmeler listesinden ayrıca değişir.'),
     satir('Yükleme sınırı', yukleme.el, 'İndirirken başkalarına gönderilen veri (her indirme için).'),
-    satir('★ Öncelik varken diğerleri', kisma.el, 'Bir indirme öncelikli yapılınca diğerleri bu hıza iner (durmaz).')))
+    satir('★ Öncelik varken diğerleri', kisma.el, 'Bir indirme öncelikli yapılınca diğerleri bu hıza iner (durmaz).'),
+    satir('Bitince paylaş (seed)', h('div', { class: 'satirIci' }, seedSecim, seedSinirKutu),
+      'Açık: indirme bitince başkalarına yükleme sürer (yükleme sınırıyla). Sınırlı: seçtiğin hızla. Bilgisayar ya da servis yeniden başlayınca paylaşım durur.')))
 
   // ── Tercih, Klip, Görünüm
   root.append(

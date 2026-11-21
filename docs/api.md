@@ -127,6 +127,8 @@ Birim **bayt/sn**, `0` = sınırsız. Doğrulama katıdır: değer JSON **sayı*
 | `clipSeconds`, `clipStartPct` | 30/60/90, 0–90 | 60, 30 | Klip uzunluğu ve başlangıç noktası (sürenin yüzdesi) |
 | `showBadges` | bool | true | Stremio posterlerinde rozet (`/api/items` `summary.settings.showBadges`) |
 | `deleteWatchedDays` | tam sayı 0–3650 | 0 | Bitmiş indirme son oynatmasından bu kadar gün sonra dosyasıyla silinir (0 = kapalı); hiç oynatılmamışa dokunulmaz |
+| `seedMode` | `kapali` / `acik` / `sinirli` | `kapali` (config `seedAfterDownload: true` ise `acik`) | Bitince paylaşım (seed). `kapali`: süreç kapanır, yükleme yok. `acik`: süreç açık kalır, yükleme `uploadLimit` ile. `sinirli`: yükleme `seedLimit` ile. `kapali`ya alınınca paylaşılanlar hemen durur. Servis yeniden açılınca paylaşım sürmez (yeniden doğrulama yükü olmasın). Öğe görünümünde `seeding`, `uploadSpeed`, `peers`, `seedUploadedBytes` |
+| `seedLimit` | bayt/sn (hız sınırı kuralı) | 100000 | `sinirli` kipte paylaşım hızı |
 
 Kurallar (`lib/kurallar.mjs`, `OFFLINE_KURAL_MS` aralıkla, vars. 15 sn; ayar değişince ve indirme bitince hemen): öğe görünümünde `autoPaused` (`kuyruk` | `saat` | `disk` | `null`) ve `lastPlayedAt`. Kullanıcı duraklatırsa `autoPaused` silinir, kural o öğeyi sürdürmez. Oynatılan indirme ve kural engellerken elle sürdürülen (ya da İndir+oynat ile başlatılan) indirme saat/kuyruk kuralından muaftır (bitene ya da elle duraklatılana dek); disk kuralı oynatılmayan her indirmeye uygulanır. Kuyrukta önce öncelikli, sonra en eski eklenen başlar; sınır aşılırsa en yeni eklenen sıraya döner.
 

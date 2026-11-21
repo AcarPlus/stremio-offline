@@ -18,7 +18,7 @@ test('H5: BOM\'lu ayarlar.json okunur', () => {
   try {
     fs.writeFileSync(path.join(dir, 'ayarlar.json'), BOM + JSON.stringify({ defaultDownloadLimit: 300000, uploadLimit: 50000, priorityThrottle: 150000 }))
     const s = new Settings({ dataDir: dir })
-    assert.deepEqual(s.get(), { defaultDownloadLimit: 300000, uploadLimit: 50000, priorityThrottle: 150000 })
+    assert.deepEqual(s.get(), { defaultDownloadLimit: 300000, uploadLimit: 50000, priorityThrottle: 150000, seedLimit: 100000 })
     assert.equal(yedekler(dir, 'ayarlar.json').length, 0, 'sağlam dosya yedeklenmez')
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
