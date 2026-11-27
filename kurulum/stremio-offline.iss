@@ -33,6 +33,8 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 DisableReadyPage=yes
 UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\stremio-offline.ico
+SetupIconFile=stremio-offline.ico
 LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename=StremioOffline-Kurulum
@@ -59,6 +61,7 @@ Type: filesandordirs; Name: "{app}\web"
 
 [Files]
 Source: "{#Kaynak}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "stremio-offline.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
 ; ilk kurulum: Stremio'yu düğmeli aç (servisi de başlatır)
